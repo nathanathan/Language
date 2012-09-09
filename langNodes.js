@@ -3,7 +3,7 @@ exports.baseNode = {
 	type:'baseNode',
     "repository": {
         "type": "gist",
-        "id": "3681913"
+        "gistId": "3681913"
     },
 	MrParse:String(function(req, callback){
 		callback();

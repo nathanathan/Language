@@ -52,37 +52,15 @@ app.get('/', function(req, res){
 	res.send(template({jsonObject : {title: "nathan"}}));
 	return;
     */
-    db.collection('test').find().toArray(function(err, items){
+    db.collection('langNodes').find().toArray(function(err, items){
         if(err) throw err;
         res.writeHead(200, {'Content-Type': 'text/plain'});
         res.end(JSON.stringify(items));
     });
     return;
-	var gistId = 3549496;
 
-	var options = {
-        host: 'api.github.com',
-        port: 443,
-        path: '/gists/' + gistId,
-        method: 'GET'
-	};
-
-	https.request(options, function(gitres) {
-		var gitdata = new pipette.Sink(gitres);
-		//res.send('hi');
-		gitdata.on('data', function (data) {
-			var gistJson = JSON.parse(data.toString());
-			res.send(JSON.stringify(gistJson.files));
-		});
-	})
-    .on('error', function(e) {
-        res.send(e);
-	})
-    .end();
-
-	//eval("res.send('hi');"); It works! Mwahahaha
 	//res.send(zcache['index.html'], {'Content-Type': 'text/html'});
-	return;
+
 	/*
 	I would like to be able to do a recursive map reduce call where my map function
 	does another map reduce, and the nested reduce
@@ -144,32 +122,53 @@ app.get('/', function(req, res){
 	);
     */
 });
-
-app.get('/node/:id', function(req, res){
+/**
+ * Return info on a language node and sync it with it's repo
+ **/
+app.get('/langNode/:id', function(req, res){
     var id = req.params.id;
-    db.collection('langeNodes').findById(id, function(err, langNode) {
-        var that = this;
-        
-        if(err) {
-            res.send(err);
+    db.collection('langNodes').findById(id, function(err, langNode) {
+        if(err || langNode === null) {
+            res.send('Error: ' + err);
+            return;
         }
-		res.send(JSON.stringify(this));//JSON.stringify(langNode)
+        var repo = langNode.repository;
+        if(repo.type === 'gist') {
+            https.request({
+                host: 'api.github.com',
+                port: 443,
+                path: '/gists/' + repo.gistId,
+                method: 'GET'
+            }, function(gitres) {
+                var gitdata = new pipette.Sink(gitres);
+                //res.send('hi');
+                gitdata.on('data', function (data) {
+                    var gistJson = JSON.parse(data.toString());
+                    db.collection('langNodes').update({'id':langNode.id},
+                        _.extend(langNode, {z:1}),
+                        {upsert:true, safe:true},
+                        function(err, result) {
+                            assert.equal(null, err);
+                            assert.equal(1, result);
+                            res.send('SYNCED:' + JSON.stringify(langNode));//gistJson.files
+                        });
+                });
+            })
+            .on('error', function(e) {
+                res.send(e);
+            })
+            .end();
+        } else if(repo.type === 'github') {
+            //see:
+            //http://developer.github.com/v3/repos/contents/
+        } else {
+            res.send(JSON.stringify(langNode));
+        }
 	});
-});
-
-app.get('/edit', function(req, res){
-	db.collection('test').find({'name':'main'}).toArray(function(err, stuff) {
-		res.send(stuff[0].content, {'Content-Type': 'text/html'});
-	});
-});
-
-app.post('/test', function(req, res){
-	//var result = _.extend(Object.create({a:1}), {b:2});
-	//res.send(JSON.stringify(result.a));
-	eval(req.body.content);
 });
 
 //TODO: This has security issues I believe.
+//TODO: Turn this into a way to submit LangNodes
 app.post('/', function(req, res){
 	db.collection('test').update({'name':'main'},
 		{ $set : req.body });
@@ -210,22 +209,9 @@ process.on('exit', function() { terminator(); });
 });
 
 
-//Question: Should I connect to the database on each request?
+//Question: What is the ideal place to connect to the db
 app.listen(port, ipaddr, function() {
     db = mongo.db(config.databaseUrl);
-    /*
-	var doc1 = {
-        'name':'main',
-        'content': fs.readFileSync('./initial.html', encoding='utf8')
-	};
-	db.collection('test').update({'name':'main'},
-		doc1,
-		{upsert:true, safe:true},
-		function(err, result) {
-			assert.equal(null, err);
-			assert.equal(1, result);
-		});
-    */
 	//init LangNodes
     var testNodes = [
         _.extend(Object.create(langNodes.baseNode), {hi:'hi'})
@@ -240,6 +226,5 @@ app.listen(port, ipaddr, function() {
 				assert.equal(1, result);
 			});
 	});
-
     console.log('%s: Node server started on %s:%d ...', Date(Date.now() ), ipaddr, port);
 });
