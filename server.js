@@ -125,46 +125,62 @@ app.get('/', function(req, res){
 /**
  * Return info on a language node and sync it with it's repo
  **/
-app.get('/langNode/:id', function(req, res){
+app.get('/langNode/:id', function (req, res) {
     var id = req.params.id;
-    db.collection('langNodes').findById(id, function(err, langNode) {
-        if(err || langNode === null) {
+    db.collection('langNodes').findById(id, function (err, langNode) {
+        if (err || langNode === null) {
             res.send('Error: ' + err);
             return;
         }
         var repo = langNode.repository;
-        if(repo.type === 'gist') {
+        if (repo.type === 'gist') {
             https.request({
                 host: 'api.github.com',
                 port: 443,
                 path: '/gists/' + repo.gistId,
                 method: 'GET'
-            }, function(gitres) {
+            }, function (gitres) {
                 var gitdata = new pipette.Sink(gitres);
-                //res.send('hi');
                 gitdata.on('data', function (data) {
                     var gistJson = JSON.parse(data.toString());
-                    db.collection('langNodes').update({'id':langNode.id},
-                        _.extend(langNode, {z:1}),
-                        {upsert:true, safe:true},
-                        function(err, result) {
-                            assert.equal(null, err);
-                            assert.equal(1, result);
-                            res.send('SYNCED:' + JSON.stringify(langNode));//gistJson.files
-                        });
+                    var langNodeFile = gistJson.files['languageNode.json'];
+                    var lastGistCommitDate = new Date(gistJson.history[0].committed_at);
+                    var lastSyncDate = langNode.lastSync ? new Date(langNode.lastSync) : new Date(0);
+                    if (lastGistCommitDate > lastSyncDate) {
+                        var newLangNode = _.extend({
+                                repository: langNode.repository,
+                                lastSync: new Date()
+                            },
+                            JSON.parse(langNodeFile.content));
+                        db.collection('langNodes').update({
+                                'id': langNode.id
+                            },
+                            newLangNode,
+                            {
+                                upsert: true,
+                                safe: true
+                            },
+                            function (err, result) {
+                                assert.equal(null, err);
+                                assert.equal(1, result);
+                                res.send('SYNCED:' + JSON.stringify(newLangNode));
+                            });
+                    } else {
+                        res.send('Already synced: ' + data.toString());
+                    }
                 });
-            })
-            .on('error', function(e) {
+            }).on('error', function (e) {
                 res.send(e);
-            })
-            .end();
-        } else if(repo.type === 'github') {
+            }).end();
+        }
+        else if (repo.type === 'github') {
             //see:
             //http://developer.github.com/v3/repos/contents/
-        } else {
+        }
+        else {
             res.send(JSON.stringify(langNode));
         }
-	});
+    });
 });
 
 //TODO: This has security issues I believe.
