@@ -3,6 +3,7 @@ var express = require('express');
 var fs      = require('fs');
 var _ = require('underscore')._;
 var assert = require('assert');
+
 var Handlebars = require('handlebars');
 Handlebars.registerHelper('stringify', function(object) {
     return JSON.stringify(object);
@@ -20,8 +21,9 @@ var config = require('./config');
 var langNodes = require('./langNodes');
 
 //  Local cache for static content [fixed and loaded at startup]
-var zcache = { 'index.html': '', 'ace-editor.html': '' };
-zcache['index.html'] = fs.readFileSync('index.html'); //  Cache index.html
+var zcache = {};
+zcache.indexTemplate = Handlebars.compile(fs.readFileSync('index.html', encoding='utf8'));
+
 //zcache['ace-editor.html'] = fs.readFileSync('./ace-editor.html', encoding='utf8');
 
 // Create "express" server.
@@ -42,21 +44,36 @@ app.configure(function(){
 app.get('/health', function(req, res){
     res.send('1');
 });
-
+app.get('/category/:category', function(req, res){
+    if('q' in req.query){
+        res.send(req.query);
+    }
+    var category = req.params.category;
+    var renderedTemplate = zcache.indexTemplate({'category' : category});
+    res.send(renderedTemplate);
+});
 // Handler for GET /
 app.get('/', function(req, res){
-
+    if('q' in req.query){
+        res.send(req.query);
+        return;
+    }
+    var category = 'main';
+    var renderedTemplate = zcache.indexTemplate({'category' : category});
+    res.send(renderedTemplate);
+    return;
     /*
     //TODO: Cache the templates
     var template = Handlebars.compile("{{stringify jsonObject}} says hi.");
 	res.send(template({jsonObject : {title: "nathan"}}));
 	return;
-    */
+
     db.collection('langNodes').find().toArray(function(err, items){
         if(err) throw err;
         res.writeHead(200, {'Content-Type': 'text/plain'});
         res.end(JSON.stringify(items));
     });
+    */
     return;
 
 	//res.send(zcache['index.html'], {'Content-Type': 'text/html'});
@@ -66,19 +83,19 @@ app.get('/', function(req, res){
 	does another map reduce, and the nested reduce
 	Furthermore I would like to do this in responce to a node.js request.
 	Is this possible?
-	
+
 	Complicated recursive map reduce query
-	
+
 	I'm trying to write a handler in node.js that does the following:
 	Performs a root MapReduce job
 	In the root map function creates child map reduce jobs.
 	And passes its emit function into the child job's scope to be called from its finalize function
 	https://groups.google.com/forum/?fromgroups#!forum/mongodb-user
-	
+
 	Think about:
 	Instead of NTs having arrays, they could just be a bunch of nodes with the same name.
 	Might make them easier to rank bc order wouldn't be inherent
-	
+
 	var result = db.collection("langNodes").mapReduce(
 		String(function(){
 			emit( 'x' , this );
@@ -111,7 +128,7 @@ app.get('/', function(req, res){
 			out : {inline : 1}
 		},
 		function(err, dbres) {
-			if(err) { 
+			if(err) {
 				res.send("ERR");
 				//throw err;
 			} else {
@@ -123,7 +140,7 @@ app.get('/', function(req, res){
     */
 });
 /**
- * Return info on a language node and sync it with it's repo
+ * Return info on a language node and sync it with its repo
  **/
 app.get('/langNode/:id', function (req, res) {
     var id = req.params.id;
@@ -149,6 +166,7 @@ app.get('/langNode/:id', function (req, res) {
                     if (lastGistCommitDate > lastSyncDate) {
                         var newLangNode = _.extend({
                                 repository: langNode.repository,
+                                files: gistJson.files,
                                 lastSync: new Date()
                             },
                             JSON.parse(langNodeFile.content));
