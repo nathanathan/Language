@@ -23,8 +23,7 @@ var langNodes = require('./langNodes');
 //  Local cache for static content [fixed and loaded at startup]
 var zcache = {};
 zcache.indexTemplate = Handlebars.compile(fs.readFileSync('index.html', encoding='utf8'));
-
-//zcache['ace-editor.html'] = fs.readFileSync('./ace-editor.html', encoding='utf8');
+zcache.resultsTemplate = Handlebars.compile(fs.readFileSync('results.html', encoding='utf8'));
 
 // Create "express" server.
 var app  = express.createServer();
@@ -33,7 +32,8 @@ app.configure(function(){
 	//app.use(express.errorHandler({ dumpExceptions: true, showStack: true }));
 	app.use(express.bodyParser());//This must come before router
 	app.use(app.router);
-	app.use(express.static('./ace-builds'));
+	//app.use(express.static('./ace-builds'));
+    app.use(express.static('./static'));
 });
 
 /*  =====================================================================  */
@@ -45,23 +45,33 @@ app.get('/health', function(req, res){
     res.send('1');
 });
 app.get('/category/:category', function(req, res){
-    if('q' in req.query){
-        res.send(req.query);
-    }
+    //TODO: Check that the category exists.
+    var renderedTemplate;
     var category = req.params.category;
-    var renderedTemplate = zcache.indexTemplate({'category' : category});
-    res.send(renderedTemplate);
+    if('q' in req.query){
+        db.collection('langNodes').find().toArray(function(err, items){
+            if(err) throw err;
+            renderedTemplate = zcache.resultsTemplate({interpretations: items, parseId:123, query: req.query.q});
+            res.send(renderedTemplate);
+        });
+    } else {
+        renderedTemplate = zcache.indexTemplate({'category' : category});
+        res.send(renderedTemplate);
+    }
 });
 // Handler for GET /
 app.get('/', function(req, res){
+    //res.writeHead(200, {'Content-Type': 'text/plain'});
+    var renderedTemplate;
     if('q' in req.query){
         res.send(req.query);
         return;
+    } else {
+        var category = 'main';
+        renderedTemplate = zcache.indexTemplate({'category' : category});
+        res.send(renderedTemplate);
+        return;
     }
-    var category = 'main';
-    var renderedTemplate = zcache.indexTemplate({'category' : category});
-    res.send(renderedTemplate);
-    return;
     /*
     //TODO: Cache the templates
     var template = Handlebars.compile("{{stringify jsonObject}} says hi.");
@@ -74,9 +84,6 @@ app.get('/', function(req, res){
         res.end(JSON.stringify(items));
     });
     */
-    return;
-
-	//res.send(zcache['index.html'], {'Content-Type': 'text/html'});
 
 	/*
 	I would like to be able to do a recursive map reduce call where my map function
