@@ -59,8 +59,15 @@ app.get('/category/:category', function(req, res){
         res.send(renderedTemplate);
     }
 });
+
 // Handler for GET /
 app.get('/', function(req, res){
+    db.collection('langNodes').find().toArray(function(err, items){
+        if(err) throw err;
+        res.writeHead(200, {'Content-Type': 'text/plain'});
+        res.end(JSON.stringify(items));
+    });
+    return;
     //res.writeHead(200, {'Content-Type': 'text/plain'});
     var renderedTemplate;
     if('q' in req.query){
@@ -146,74 +153,105 @@ app.get('/', function(req, res){
 	);
     */
 });
+
+function fetchRepo(repository, callback) {
+    if (repository.type === 'gist') {
+        https.request({
+            host: 'api.github.com',
+            port: 443,
+            path: '/gists/' + repository.gistId,
+            method: 'GET'
+        }, function(gitres) {
+            var gitdata = new pipette.Sink(gitres);
+            gitdata.on('data', function(data) {
+                callback(null, JSON.parse(data.toString()));
+            });
+        }).on('error', callback).end();
+    }
+    else if (repository.type === 'github') {
+        //see:
+        //http://developer.github.com/v3/repos/contents/
+    }
+    else {
+        callback("Unknown repo type");
+    }
+}
+function syncNode(query, content, callback) {
+    db.collection('langNodes').findAndModify(query, {
+        $set: {
+            lastSync: new Date(),
+            content: content
+        }
+    }, {
+        upsert: true,
+        'new': true,
+        safe: true //Not sure if this is needed for findAndModify, it checks for success
+    },
+    function(err, result) {
+        callback(err, result);
+    });
+}
+
 /**
  * Return info on a language node and sync it with its repo
  **/
-app.get('/langNode/:id', function (req, res) {
+app.get('/langNode/:id', function(req, res) {
     var id = req.params.id;
-    db.collection('langNodes').findById(id, function (err, langNode) {
-        if (err || langNode === null) {
+    db.collection('langNodes').findById(id, function(err, langNode) {
+        if (err) {
             res.send('Error: ' + err);
             return;
         }
-        var repo = langNode.repository;
-        if (repo.type === 'gist') {
-            https.request({
-                host: 'api.github.com',
-                port: 443,
-                path: '/gists/' + repo.gistId,
-                method: 'GET'
-            }, function (gitres) {
-                var gitdata = new pipette.Sink(gitres);
-                gitdata.on('data', function (data) {
-                    var gistJson = JSON.parse(data.toString());
-                    var langNodeFile = gistJson.files['languageNode.json'];
-                    var lastGistCommitDate = new Date(gistJson.history[0].committed_at);
-                    var lastSyncDate = langNode.lastSync ? new Date(langNode.lastSync) : new Date(0);
-                    if (lastGistCommitDate > lastSyncDate) {
-                        var newLangNode = _.extend({
-                                repository: langNode.repository,
-                                files: gistJson.files,
-                                lastSync: new Date()
-                            },
-                            JSON.parse(langNodeFile.content));
-                        db.collection('langNodes').update({
-                                'id': langNode.id
-                            },
-                            newLangNode,
-                            {
-                                upsert: true,
-                                safe: true
-                            },
-                            function (err, result) {
-                                assert.equal(null, err);
-                                assert.equal(1, result);
-                                res.send('SYNCED:' + JSON.stringify(newLangNode));
-                            });
-                    } else {
-                        res.send('Already synced: ' + data.toString());
+        fetchRepo(langNode.repository, function(err, repositoryData) {
+            if (err) {
+                res.send('Error: ' + err);
+                return;
+            }
+            var lastGistCommitDate = new Date(repositoryData.history[0].committed_at);
+            var lastSyncDate = langNode.lastSync ? new Date(langNode.lastSync) : new Date(0);
+            if (lastGistCommitDate > lastSyncDate) {
+                var content = JSON.parse(repositoryData.files['languageNode.json']);
+                content.files = repositoryData.files;
+                syncNode({
+                    _id: langNode._id
+                }, content, function(err, syncedNode) {
+                    if (err) {
+                        res.send('Error: ' + err);
+                        return;
                     }
+                    res.send('SYNCED:' + JSON.stringify(syncedNode));
                 });
-            }).on('error', function (e) {
-                res.send(e);
-            }).end();
-        }
-        else if (repo.type === 'github') {
-            //see:
-            //http://developer.github.com/v3/repos/contents/
-        }
-        else {
-            res.send(JSON.stringify(langNode));
-        }
+            }
+            else {
+                res.send('Repository already synced.');
+            }
+        });
     });
 });
 
-//TODO: This has security issues I believe.
-//TODO: Turn this into a way to submit LangNodes
-app.post('/', function(req, res){
-	db.collection('test').update({'name':'main'},
-		{ $set : req.body });
-	res.send(req.body, {'Content-Type': 'text/html'});
+app.post('/submit', function(req, res) {
+    var repository = {
+        type: 'gist',
+        gistId: req.body.gistId
+    };
+    fetchRepo(repository, function(err, repositoryData) {
+        if (err) {
+            res.send('Error: ' + err);
+            return;
+        }
+        console.log(repositoryData);
+        var content = JSON.parse(repositoryData.files['languageNode.json']);
+        content.files = repositoryData.files;
+        syncNode({
+            repository: repository
+        }, content, function(err, syncedNode) {
+            if (err) {
+                res.send('Error: ' + err);
+                return;
+            }
+            res.send('SYNCED:' + JSON.stringify(syncedNode));
+        });
+    });
 });
 
 //  Get the environment variables we need.
