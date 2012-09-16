@@ -1,11 +1,11 @@
-exports.baseNode = {
-    id:0,
-	type:'baseNode',
+exports.testNodes = [{lastSync:0, content:null,
     "repository": {
         "type": "gist",
         "gistId": "3681913"
-    },
-	MrParse:String(function(req, callback){
-		callback();
-	})
-};
+    }
+}, {lastSync:0, content:null,
+    "repository": {
+        "type": "gist",
+        "gistId": "3730443"
+    }
+}];

@@ -44,6 +44,24 @@ app.configure(function(){
 app.get('/health', function(req, res){
     res.send('1');
 });
+
+app.get('/dbg', function(req, res) {
+    db.collection('langNodes').find().toArray(function(err, items){
+        if(err) throw err;
+        res.writeHead(200, {'Content-Type': 'text/plain'});
+        res.end(JSON.stringify(items));
+    });
+    return;
+});
+app.get('/dbgf', function(req, res) {
+    db.collection('files').find().toArray(function(err, items){
+        if(err) throw err;
+        res.writeHead(200, {'Content-Type': 'text/plain'});
+        res.end(JSON.stringify(items));
+    });
+    return;
+});
+
 app.get('/category/:category', function(req, res){
     //TODO: Check that the category exists.
     var renderedTemplate;
@@ -62,12 +80,6 @@ app.get('/category/:category', function(req, res){
 
 // Handler for GET /
 app.get('/', function(req, res){
-    db.collection('langNodes').find().toArray(function(err, items){
-        if(err) throw err;
-        res.writeHead(200, {'Content-Type': 'text/plain'});
-        res.end(JSON.stringify(items));
-    });
-    return;
     //res.writeHead(200, {'Content-Type': 'text/plain'});
     var renderedTemplate;
     if('q' in req.query){
@@ -164,7 +176,14 @@ function fetchRepo(repository, callback) {
         }, function(gitres) {
             var gitdata = new pipette.Sink(gitres);
             gitdata.on('data', function(data) {
-                callback(null, JSON.parse(data.toString()));
+                var parsedData;
+                try{
+                    parsedData = JSON.parse(data.toString());
+                } catch(err) {
+                    callback(err);
+                    return;
+                }
+                callback(null, parsedData);
             });
         }).on('error', callback).end();
     }
@@ -177,15 +196,15 @@ function fetchRepo(repository, callback) {
     }
 }
 function syncNode(query, content, callback) {
-    db.collection('langNodes').findAndModify(query, {
+    db.collection('langNodes').findAndModify(query, [['_id', 'descending']], {
         $set: {
-            lastSync: new Date(),
+            lastSync: String(new Date()),
             content: content
         }
     }, {
-        upsert: true,
+        'upsert': true,
         'new': true,
-        safe: true //Not sure if this is needed for findAndModify, it checks for success
+        'safe': true //Not sure if this is needed for findAndModify, it checks for success
     },
     function(err, result) {
         callback(err, result);
@@ -203,15 +222,22 @@ app.get('/langNode/:id', function(req, res) {
             return;
         }
         fetchRepo(langNode.repository, function(err, repositoryData) {
+            var content, lastGistCommitDate, lastSyncDate;
             if (err) {
                 res.send('Error: ' + err);
                 return;
             }
-            var lastGistCommitDate = new Date(repositoryData.history[0].committed_at);
-            var lastSyncDate = langNode.lastSync ? new Date(langNode.lastSync) : new Date(0);
+            lastGistCommitDate = new Date(repositoryData.history[0].committed_at);
+            lastSyncDate = langNode.lastSync ? new Date(langNode.lastSync) : new Date(0);
             if (lastGistCommitDate > lastSyncDate) {
-                var content = JSON.parse(repositoryData.files['languageNode.json']);
-                content.files = repositoryData.files;
+                try{
+                    content = JSON.parse(repositoryData.files['languageNode.json'].content);
+                } catch(err) {
+                    res.send('Error: ' + err);
+                    return;
+                }
+                //content.files = repositoryData.files;
+                
                 syncNode({
                     _id: langNode._id
                 }, content, function(err, syncedNode) {
@@ -219,6 +245,18 @@ app.get('/langNode/:id', function(req, res) {
                         res.send('Error: ' + err);
                         return;
                     }
+                    //Files are kept separately so langNode docs are smaller.
+                    //Eventually, I would like to use ghpages
+                    db.collection('files').update({
+                        _id: langNode._id
+                    }, {
+                        _id: langNode._id,
+                        files: repositoryData.files
+                    }, {
+                        upsert: true,
+                        safe: true
+                    }, function() {});
+                    
                     res.send('SYNCED:' + JSON.stringify(syncedNode));
                 });
             }
@@ -235,13 +273,19 @@ app.post('/submit', function(req, res) {
         gistId: req.body.gistId
     };
     fetchRepo(repository, function(err, repositoryData) {
+        var content;
         if (err) {
             res.send('Error: ' + err);
             return;
         }
-        console.log(repositoryData);
-        var content = JSON.parse(repositoryData.files['languageNode.json']);
-        content.files = repositoryData.files;
+        try{
+            content = JSON.parse(repositoryData.files['languageNode.json'].content);
+        } catch(err) {
+            res.send('Error: ' + err);
+            return;
+        }
+        //content.files = repositoryData.files;
+        
         syncNode({
             repository: repository
         }, content, function(err, syncedNode) {
@@ -290,20 +334,34 @@ process.on('exit', function() { terminator(); });
 
 //Question: What is the ideal place to connect to the db
 app.listen(port, ipaddr, function() {
+    var reinit = true;
     db = mongo.db(config.databaseUrl);
-	//init LangNodes
-    var testNodes = [
-        _.extend(Object.create(langNodes.baseNode), {hi:'hi'})
-        //Object.create(langNodes.baseNode)
-	];
-    testNodes.forEach(function(element, index, array) {
-		db.collection('langNodes').update({'id':element.id},
-			element,
-			{upsert:true, safe:true},
-			function(err, result) {
-				assert.equal(null, err);
-				assert.equal(1, result);
-			});
-	});
-    console.log('%s: Node server started on %s:%d ...', Date(Date.now() ), ipaddr, port);
+    db.createCollection('files', function(err, collection) {});
+    db.createCollection('langNodes', function(err, collection) {
+        if(reinit){
+            db.collection('langNodes').remove(function() {
+                /*
+                var testNodes = [
+                _.extend(Object.create(langNodes.testNodes), {
+                    hi: 'hi'
+                })
+                //Object.create(langNodes.baseNode)
+                ];
+                */
+        
+                db.collection('langNodes').insert(langNodes.testNodes, {
+                    upsert: true,
+                    safe: true
+                },
+        
+                function(err, result) {
+                    assert.equal(null, err);
+                });
+        
+                console.log('%s: Node server started on %s:%d ...', Date(Date.now()), ipaddr, port);
+            });
+        } else {
+            console.log('%s: Node server started on %s:%d ...', Date(Date.now()), ipaddr, port);
+        }
+    });
 });
