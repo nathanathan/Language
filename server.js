@@ -16,9 +16,8 @@ var https = require('https');
 var pipette = require('pipette');
 
 var config = require('./config');
-
-
 var langNodes = require('./langNodes');
+//var earley = require('./earley');
 
 //  Local cache for static content [fixed and loaded at startup]
 var zcache = {};
@@ -67,7 +66,7 @@ app.get('/category/:category', function(req, res){
     var renderedTemplate;
     var category = req.params.category;
     if('q' in req.query){
-        db.collection('langNodes').find().toArray(function(err, items){
+        db.collection('langNodes').find().toArray(function(err, items) {
             if(err) throw err;
             renderedTemplate = zcache.resultsTemplate({interpretations: items, parseId:123, query: req.query.q});
             res.send(renderedTemplate);
@@ -78,92 +77,75 @@ app.get('/category/:category', function(req, res){
     }
 });
 
+EarleyParser = {
+    parse : function (input, startCategory, collection, callback) {
+        var chart = [[{
+            'components' : [startCategory],
+            'atComponent' : 0
+        }]];
+        
+        function predictor(category, j) {
+            collection.find({ 'category' : category }, function(err, cursor) {
+                if (err) throw err;
+                cursor.each(function(langNode) {
+                    langNode.atComponent = 0;
+                    langNode.origin = j;
+                    chart[j].push(langNode);
+                });
+            }
+        }
+        procedure SCANNER((A → α•B, i), j),
+            if B ⊂ PARTS-OF-SPEECH(word[j]) then
+                ADD-TO-SET((B → word[j], i), chart[j + 1])
+            end
+
+        procedure COMPLETER((B → γ•, j), k),
+            for each (A → α•Bβ, i) in chart[j] do
+                ADD-TO-SET((A → αB•β, i), chart[k])
+            end
+
+        var idx = 0;
+        var character;
+        while( idx < input.length){
+            character = input[idx];
+            //Parallelizable?
+            //column is appended to within the loop
+            //need to be careful.
+            _.each(chart[idx], function(langNode, idx){
+                var currentComponent;
+                if(langNode.atComponent < langNode.components.length) { //is incomplete
+                    currentComponent = langNode.components[langNode.atComponent];
+                    if(_.isString(currentComponent)) { //TODO: Strings are teminals.
+                         scanner(currentComponent.value, idx);
+                    } else if(.isObject((currentComponent)) {
+                        //maybe use property name as type for sake of syntax?
+                        if(currentComponent.type === 'category') { //categories are non-terminals
+                            predictor(currentComponent.value, idx);
+                        } else if(currentComponent.type === 'regex') {
+                            //TODO
+                        } else {
+                            throw "Unknown component type";
+                        }
+                    }
+                } else {
+                    completer(currentComponent.value, idx);
+                }
+            });
+        }
+    }
+};
 // Handler for GET /
 app.get('/', function(req, res){
-    //res.writeHead(200, {'Content-Type': 'text/plain'});
     var renderedTemplate;
     if('q' in req.query){
-        res.send(req.query);
-        return;
+        EarleyParser.parse(req.query.q, db.collection('langNodes'), function(parseTree){
+            res.send(JSON.stringify(parseTree));
+        });
     } else {
         var category = 'main';
         renderedTemplate = zcache.indexTemplate({'category' : category});
         res.send(renderedTemplate);
-        return;
     }
-    /*
-    //TODO: Cache the templates
-    var template = Handlebars.compile("{{stringify jsonObject}} says hi.");
-	res.send(template({jsonObject : {title: "nathan"}}));
-	return;
-
-    db.collection('langNodes').find().toArray(function(err, items){
-        if(err) throw err;
-        res.writeHead(200, {'Content-Type': 'text/plain'});
-        res.end(JSON.stringify(items));
-    });
-    */
-
-	/*
-	I would like to be able to do a recursive map reduce call where my map function
-	does another map reduce, and the nested reduce
-	Furthermore I would like to do this in responce to a node.js request.
-	Is this possible?
-
-	Complicated recursive map reduce query
-
-	I'm trying to write a handler in node.js that does the following:
-	Performs a root MapReduce job
-	In the root map function creates child map reduce jobs.
-	And passes its emit function into the child job's scope to be called from its finalize function
-	https://groups.google.com/forum/?fromgroups#!forum/mongodb-user
-
-	Think about:
-	Instead of NTs having arrays, they could just be a bunch of nodes with the same name.
-	Might make them easier to rank bc order wouldn't be inherent
-
-	var result = db.collection("langNodes").mapReduce(
-		String(function(){
-			emit( 'x' , this );
-		}),
-		String(function(key, values){
-			return values[0];
-		}),
-		{out: { inline : 1},
-			finalize : String(function(){
-				res.send('hi');
-			})
-		}
-	);
-
-	//Thanks to
-	//http://benl.com/post/19927781665/mapreduce-with-mongodb-node-js
-	//for documenting MR syntax
-	var closure = function(){
-		return 12;
-	};
-	var result = db.executeDbCommand(
-		{
-			mapreduce : "langNodes",
-			map : String(function(){
-				emit( 'x' , this );
-			}),
-			reduce : String(function(key, values){
-				return values[0];
-			}),
-			out : {inline : 1}
-		},
-		function(err, dbres) {
-			if(err) {
-				res.send("ERR");
-				//throw err;
-			} else {
-				var results = dbres.documents[0].results;
-				res.send(JSON.stringify(results));
-			}
-		}
-	);
-    */
 });
 
 function fetchRepo(repository, callback) {
@@ -248,9 +230,9 @@ app.get('/langNode/:id', function(req, res) {
                     //Files are kept separately so langNode docs are smaller.
                     //Eventually, I would like to use ghpages
                     db.collection('files').update({
-                        _id: langNode._id
+                        _id: syncedNode._id
                     }, {
-                        _id: langNode._id,
+                        _id: syncedNode._id,
                         files: repositoryData.files
                     }, {
                         upsert: true,
@@ -293,6 +275,16 @@ app.post('/submit', function(req, res) {
                 res.send('Error: ' + err);
                 return;
             }
+            db.collection('files').update({
+                _id: syncedNode._id
+            }, {
+                _id: syncedNode._id,
+                files: repositoryData.files
+            }, {
+                upsert: true,
+                safe: true
+            }, function() {});
+            
             res.send('SYNCED:' + JSON.stringify(syncedNode));
         });
     });
