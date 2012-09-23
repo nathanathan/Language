@@ -9,3 +9,10 @@ exports.testNodes = [{lastSync:0, content:null,
         "gistId": "3730443"
     }
 }];
+exports.simpleTestNodes = [{
+    category: 'main',
+    components: ['hello', 'world']
+}, {
+    category: 'main',
+    components: ['test']
+}];

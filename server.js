@@ -61,6 +61,172 @@ app.get('/dbgf', function(req, res) {
     return;
 });
 
+
+/*
+function addToSet(item, arraySet) {
+    if(_.any(arraySet, function(setItem){ return item === setItem; })) {
+        //no-op
+    } else {
+        arraySet.push(item);
+    }
+}
+*/
+function isIncomplete(langNode) {
+    return (langNode.atComponent < langNode.components.length);
+}
+var EventEmitter = require( "events" ).EventEmitter;
+
+//Earley parser refrences I studied:
+//http://en.wikipedia.org/wiki/Earley_parser
+//http://www1.icsi.berkeley.edu/~stolcke/papers/cl95/paper-html.html
+//https://github.com/tomerfiliba/tau/blob/master/earley3.py
+//http://stevehanov.ca/qb.js/EarleyParser.js
+
+//My earley parser is differs from the standard in it's use of
+//node.js's asynchronous capabilities.
+//Each token is a pool that the predictions flow through, or something like that.
+//I still don't feel like I fully understand the Earley Parser.
+var EarleyParser = {
+    parse : function (input, startCategory, collection, callback) {
+        if(!input) {
+            callback('No input');
+            return;
+        }
+        if(!startCategory) {
+            callback('No start category');
+            return;
+        }
+        //Note, an emptystring is added to the end of the input array bc
+        //the scanner might try to add things when it's on the last char.
+        var splitInput = input.split('').concat(['']);
+        var chart = _.map(splitInput, function(){
+            return [];
+        });
+        var statePools = [];
+        var finishCounter = splitInput.length;
+        function finishListener() {
+            console.log("finish");
+            finishCounter--;
+            if(finishCounter <= 0){
+                callback(null, chart);
+            }
+        }
+        //This is async.
+        function predictor(category, j) {
+            console.log("predictor: category: " + category);
+            collection.find({ 'category' : category }).toArray(function(err, array) {
+                if (err) throw err;//TODO: Missing categories might be an issue, but perhaps this is only for db errors.
+                _.each(array, function(langNode){
+                    langNode.atComponent = 0;
+                    langNode.stringIdx = 0;
+                    langNode.origin = j;
+                    statePools[j].emit('add', Object.create(langNode));
+                });
+                //I'm assuming that emited events happen in order or emission.
+                statePools[j].emit('done');
+            });
+        }
+        function scanner(langNode, j) {
+            console.log("scanner");
+            console.log(langNode);
+            var component = langNode.components[langNode.atComponent];
+            if(input[j] === component[langNode.stringIdx]) {
+                //Object.create?
+                langNode.stringIdx++;
+                if(langNode.stringIdx >= component.length) {
+                    langNode.atComponent++;
+                    langNode.stringIdx = 0;
+                }
+                statePools[j+1].emit('add', Object.create(langNode));
+            }
+            statePools[j].emit('done');
+        }
+        function completer(langNode, j) {
+            console.log("completer");
+            _.each(chart[langNode.origin], function(originLN, idx) {
+                if(originLN.category === langNode.category) {
+                    statePools[j].emit('add', Object.create(langNode));
+                }
+            });
+            statePools[j].emit('done');
+        }
+        _.each(splitInput, function(character, idx) {
+            var statePool = new EventEmitter();
+            var counter = 0;
+            var prevPoolFinished = false;
+            if(idx > 0){
+                statePools[idx-1].on('finish', function(){
+                    prevPoolFinished = true;
+                    if( counter === 0 ){
+                        statePool.emit('empty');
+                    }
+                });
+            } else {
+                prevPoolFinished = true;
+            }
+            statePool.on('finish', finishListener);
+            statePool.on('done', function(){
+                console.log("done");
+                counter--;
+                if( counter === 0 ){
+                    statePool.emit('empty');
+                }
+            });
+            statePool.on('empty', function(){
+                console.log("empty");
+                if( prevPoolFinished ){
+                    statePool.emit('finish');
+                }
+            });
+            statePool.on('add', function(langNode) {
+                console.log("Adding:");
+                console.log(_.extend({}, langNode));
+                var currentComponent;
+                //Make sure the item is unique.
+                if(_.any(chart[idx], function(item){
+                        if(langNode.atComponent === item.atComponent){
+                            if(langNode.stringIdx === item.stringIdx){
+                                if(langNode.category === item.category){
+                                    return _.isEqual(langNode.components, item.components);
+                                }
+                            }
+                        }
+                        return false;
+                    })) {
+                    console.log("duplicate found");
+                    return;
+                }
+                counter++;
+                chart[idx].push(langNode);
+                if(isIncomplete(langNode)) {
+                    currentComponent = langNode.components[langNode.atComponent];
+                    if(_.isString(currentComponent)) { //TODO: Strings are teminals.
+                         scanner(langNode, idx);
+                    } else if(_.isObject(currentComponent)) {
+                        if('category' in currentComponent) { //categories are non-terminals
+                            predictor(currentComponent.category, idx);
+                        } else if('regex' in currentComponent) {
+                            //TODO
+                        } else {
+                            throw "Unknown component type:\n" + JSON.stringify(currentComponent);
+                        }
+                    }
+                } else {
+                    completer(langNode, idx);
+                }
+            }); 
+            statePools.push(statePool);
+        });
+        statePools[0].emit('add', {
+            'category' : 'GAMMA',
+            'components' : [{'category' : startCategory}],
+            'atComponent' : 0,
+            'stringIdx' : 0,
+            'origin': 0
+        });
+    }
+};
+/*
 app.get('/category/:category', function(req, res){
     //TODO: Check that the category exists.
     var renderedTemplate;
@@ -76,76 +242,46 @@ app.get('/category/:category', function(req, res){
         res.send(renderedTemplate);
     }
 });
+*/
 
-EarleyParser = {
-    parse : function (input, startCategory, collection, callback) {
-        var chart = [[{
-            'components' : [startCategory],
-            'atComponent' : 0
-        }]];
-        
-        function predictor(category, j) {
-            collection.find({ 'category' : category }, function(err, cursor) {
-                if (err) throw err;
-                cursor.each(function(langNode) {
-                    langNode.atComponent = 0;
-                    langNode.origin = j;
-                    chart[j].push(langNode);
-                });
-            }
-        }
-        procedure SCANNER((A → α•B, i), j),
-            if B ⊂ PARTS-OF-SPEECH(word[j]) then
-                ADD-TO-SET((B → word[j], i), chart[j + 1])
-            end
-
-        procedure COMPLETER((B → γ•, j), k),
-            for each (A → α•Bβ, i) in chart[j] do
-                ADD-TO-SET((A → αB•β, i), chart[k])
-            end
-
-        var idx = 0;
-        var character;
-        while( idx < input.length){
-            character = input[idx];
-            //Parallelizable?
-            //column is appended to within the loop
-            //need to be careful.
-            _.each(chart[idx], function(langNode, idx){
-                var currentComponent;
-                if(langNode.atComponent < langNode.components.length) { //is incomplete
-                    currentComponent = langNode.components[langNode.atComponent];
-                    if(_.isString(currentComponent)) { //TODO: Strings are teminals.
-                         scanner(currentComponent.value, idx);
-                    } else if(.isObject((currentComponent)) {
-                        //maybe use property name as type for sake of syntax?
-                        if(currentComponent.type === 'category') { //categories are non-terminals
-                            predictor(currentComponent.value, idx);
-                        } else if(currentComponent.type === 'regex') {
-                            //TODO
-                        } else {
-                            throw "Unknown component type";
-                        }
-                    }
-                } else {
-                    completer(currentComponent.value, idx);
-                }
-            });
-        }
-    }
-};
-// Handler for GET /
-app.get('/', function(req, res){
+app.get('/category/:category', function(req, res){
+    //TODO: Check that the category exists.
     var renderedTemplate;
+    var category = req.params.category;
     if('q' in req.query){
-        EarleyParser.parse(req.query.q, db.collection('langNodes'), function(parseTree){
-            res.send(JSON.stringify(parseTree));
+        EarleyParser.parse(req.query.q, category, db.collection('langNodes'), function(err, parseTree){
+            if(err){
+                res.send(String(err));
+                return;
+            }
+            res.send('<pre>'+JSON.stringify(_.map(parseTree, function(col) {
+                return _.map(col, function(item){
+                    return _.extend({}, item);
+                });
+            }), 2, 4)+'</pre>');
         });
     } else {
-        var category = 'main';
         renderedTemplate = zcache.indexTemplate({'category' : category});
         res.send(renderedTemplate);
     }
+});
+/*
+app.get('/', function(req, res){
+    EarleyParser.parse('test', 'general', db.collection('langNodes'), function(err, parseTree){
+        if(err){
+            res.send(String(err));
+            return;
+        }
+        res.send('<pre>'+JSON.stringify(parseTree, 2, 4)+'</pre>');
+    });
+});
+*/
+// Handler for GET /
+app.get('/', function(req, res){
+    var renderedTemplate;
+    var category = 'main';
+    renderedTemplate = zcache.indexTemplate({'category' : category});
+    res.send(renderedTemplate);
 });
 
 function fetchRepo(repository, callback) {
@@ -341,7 +477,7 @@ app.listen(port, ipaddr, function() {
                 ];
                 */
         
-                db.collection('langNodes').insert(langNodes.testNodes, {
+                db.collection('langNodes').insert(langNodes.simpleTestNodes, {
                     upsert: true,
                     safe: true
                 },
