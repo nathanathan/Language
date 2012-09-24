@@ -82,11 +82,50 @@ var EventEmitter = require( "events" ).EventEmitter;
 //https://github.com/tomerfiliba/tau/blob/master/earley3.py
 //http://stevehanov.ca/qb.js/EarleyParser.js
 
-//My earley parser is differs from the standard in it's use of
+//My Earley parser differs from the standard version in it's use of
 //node.js's asynchronous capabilities.
 //Each token is a pool that the predictions flow through, or something like that.
-//I still don't feel like I fully understand the Earley Parser.
+//I still don't feel like I fully understand it.
 var EarleyParser = {
+    chartToTree : function (chart) {
+        /*
+        var gammaState = chart.slice(-1).find(function(state){
+            return state.category === 'GAMMA';
+        });
+        var component = components.slice(-1);
+        */
+        function processComponents(components, colIdx) {
+            if(components.length === 0 || colIdx <= 0){//colIdx?
+                return [];
+            }
+            var returnComponent;
+            var component = components.slice(-1)[0];
+            if(_.isString(component)) {
+                return processComponents(components.slice(0, -1), colIdx - component.length).concat([component]);
+            } else if(_.isObject(component)) {
+                if('category' in component) { //categories are non-terminals
+                    returnComponent = Object.create(component);
+                    returnComponent.interpretations = _.filter(chart[colIdx], function(state) {
+                        return (state.category === component.category) && !isIncomplete(state);
+                    });
+                    returnComponent.interpretations = _.map(returnComponent.interpretations, function(interpretation) {
+                        var returnInterp = Object.create(interpretation);
+                        returnInterp.components = processComponents(interpretation.components, colIdx);
+                        return processComponents(components.slice(0, -1), interpretation.origin - 1).concat([_.extend({}, interpretation)]);
+                    });
+                    return [_.extend({}, returnComponent)];
+                    //return processComponents(components.slice(0, -1), component.origin - 1).concat([_.extend({}, returnComponent)]);
+                } else if('regex' in component) {
+                    //TODO
+                } else {
+                    throw "Unknown component type:\n" + JSON.stringify(component);
+                }
+            } else {
+                throw "Unknown component type:\n" + component;
+            }
+        }
+        return processComponents([{category : 'GAMMA'}], chart.length - 1);
+    },
     parse : function (input, startCategory, collection, callback) {
         if(!input) {
             callback('No input');
@@ -99,6 +138,7 @@ var EarleyParser = {
         //Note, an emptystring is added to the end of the input array bc
         //the scanner might try to add things when it's on the last char.
         var splitInput = input.split('').concat(['']);
+        console.log(splitInput);
         var chart = _.map(splitInput, function(){
             return [];
         });
@@ -112,15 +152,15 @@ var EarleyParser = {
             }
         }
         //This is async.
-        function predictor(category, j) {
-            console.log("predictor: category: " + category);
-            collection.find({ 'category' : category }).toArray(function(err, array) {
+        function predictor(catComponent, j) {
+            console.log("predictor: category: " + catComponent.category);
+            collection.find({ 'category' : catComponent.category }).toArray(function(err, array) {
                 if (err) throw err;//TODO: Missing categories might be an issue, but perhaps this is only for db errors.
                 _.each(array, function(langNode){
                     langNode.atComponent = 0;
                     langNode.stringIdx = 0;
                     langNode.origin = j;
-                    statePools[j].emit('add', Object.create(langNode));
+                    statePools[j].emit('add', langNode);
                 });
                 //I'm assuming that emited events happen in order or emission.
                 statePools[j].emit('done');
@@ -131,21 +171,27 @@ var EarleyParser = {
             console.log(langNode);
             var component = langNode.components[langNode.atComponent];
             if(input[j] === component[langNode.stringIdx]) {
-                //Object.create?
+                langNode = Object.create(langNode);
                 langNode.stringIdx++;
                 if(langNode.stringIdx >= component.length) {
                     langNode.atComponent++;
                     langNode.stringIdx = 0;
                 }
-                statePools[j+1].emit('add', Object.create(langNode));
+                statePools[j+1].emit('add', langNode);
             }
             statePools[j].emit('done');
         }
         function completer(langNode, j) {
             console.log("completer");
+            //TODO: This is probably a bug, the chart might not be fully filled out.
             _.each(chart[langNode.origin], function(originLN, idx) {
-                if(originLN.category === langNode.category) {
-                    statePools[j].emit('add', Object.create(langNode));
+                var originComponent = originLN.components[originLN.atComponent];
+                //This assumes we are completing non-terminals.
+                if(originComponent.category === langNode.category) {
+                    //Make a new state from the origin state
+                    originLN = Object.create(originLN);
+                    originLN.atComponent++;
+                    statePools[j].emit('add', originLN);
                 }
             });
             statePools[j].emit('done');
@@ -204,7 +250,7 @@ var EarleyParser = {
                          scanner(langNode, idx);
                     } else if(_.isObject(currentComponent)) {
                         if('category' in currentComponent) { //categories are non-terminals
-                            predictor(currentComponent.category, idx);
+                            predictor(currentComponent, idx);
                         } else if('regex' in currentComponent) {
                             //TODO
                         } else {
@@ -249,17 +295,20 @@ app.get('/category/:category', function(req, res){
     var renderedTemplate;
     var category = req.params.category;
     if('q' in req.query){
-        EarleyParser.parse(req.query.q, category, db.collection('langNodes'), function(err, parseTree){
+         EarleyParser.parse(req.query.q, category, db.collection('langNodes'), function(err, chart){
             if(err){
                 res.send(String(err));
                 return;
             }
-            res.send('<pre>'+JSON.stringify(_.map(parseTree, function(col) {
+            /*
+            res.send('<pre>'+JSON.stringify(_.map(chart, function(col) {
                 return _.map(col, function(item){
                     return _.extend({}, item);
                 });
             }), 2, 4)+'</pre>');
-        });
+            */
+            res.send('<pre>'+JSON.stringify(EarleyParser.chartToTree(chart), 2, 4)+'</pre>');
+         });
     } else {
         renderedTemplate = zcache.indexTemplate({'category' : category});
         res.send(renderedTemplate);
