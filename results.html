@@ -7,28 +7,28 @@
     <link rel="stylesheet" href="../css/results.css" type="text/css" />
 </head>
 <body>
-<div class="header">
-    <h1>Language</h1>
-    <input value="{{query}}" style="width:30em"></input>
-    <button type="submit" value="interpret">interpret</button>
-</div>
-{{#each interpretations}}
-    <div class='interpretation'>
-    	<iframe class="content" src="../display/{{_id}}?parseId={{../parseId}}"></iframe>
-		<div class="vote">
-			<a class="upvote votebtn"
-                href="../upvote/{{_id}}?parseId={{../parseId}}"
-                title="Up vote (click again to undo)">up vote</a>
-			<span>|</span>
-			<a class="downvote votebtn"
-                href="../downvote/{{_id}}?parseId={{../parseId}}"
-                title="Down vote (click again to undo)">down vote</a>
-            {{#if repository.type}}
-			    <a class="source" href="https://gist.github.com/{{repository.gistId}}">view source</a>
-            {{/if}}
-		</div>
+    <div class="header">
+        <h1>Language</h1>
+        <input value="{{query}}" style="width:30em"></input>
+        <button type="submit" value="interpret">interpret</button>
     </div>
-{{/each}}
+    {{#each parseTree.interpretations}}
+        <div class='interpretation'>
+        	<iframe class="content" src="../display/{{_id}}?parseId={{../parseId}}"></iframe>
+    		<div class="vote">
+    			<a class="upvote votebtn"
+                    href="../upvote/{{_id}}?parseId={{../_id}}"
+                    title="Up vote (click again to undo)">up vote</a>
+    			<span>|</span>
+    			<a class="downvote votebtn"
+                    href="../downvote/{{_id}}?parseId={{../_id}}"
+                    title="Down vote (click again to undo)">down vote</a>
+                {{#if repository.type}}
+    			    <a class="source" href="https://gist.github.com/{{repository.gistId}}">view source</a>
+                {{/if}}
+    		</div>
+        </div>
+    {{/each}}
     <button>Load more interpretations</button>
 </body>
 </html>

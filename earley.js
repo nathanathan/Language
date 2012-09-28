@@ -52,33 +52,35 @@ module.exports = {
      *      ]
      * To avoid ambiguity and dealing with nested interpretations we can make a forest with every full parse tree, but that could get pretty big.
      * For now I'm grouping interpretations to the left.
+     * 
+     * Nevermind! I'm really tired right now but I have an idea that seems to make more sence
+     * where interpretations apply to the whole component array.
      */
     chartToTree : function (chart) {
-         //Try to find all the components in the chart starting at colIdx and progressing left.
+         //Try to find all the components' childen in the chart starting at colIdx and progressing left.
+         //Returns an array of interpretations. Each interpretation is a corresponding array of components.
         function processComponents(components, colIdx) {
-            var component, interpretations;
+            var component, langNodeInterps;
             if(components.length === 0 || colIdx <= 0){//colIdx?
-                return [];
+                return [[]];
             }
             component = components.slice(-1)[0];
             if(_.isString(component)) {
-                return processComponents(components.slice(0, -1), colIdx - component.length).concat([component]);
+                return _.map(processComponents(components.slice(0, -1), colIdx - component.length), function(interpretation){
+                    return interpretation.concat(component);
+                });
             } else if(_.isObject(component)) {
                 if('category' in component) {
-                    interpretations = _.filter(chart[colIdx], function(langNode) {
+                    langNodeInterps = _.filter(chart[colIdx], function(langNode) {
                         return (langNode.category === component.category) && !isIncomplete(langNode);
                     });
-                    interpretations = _.map(interpretations, function(interpretation) {
-                        var returnInterp = Object.create(interpretation);
-                        returnInterp.components = processComponents(interpretation.components, colIdx);
-                        return processComponents(components.slice(0, -1), interpretation.origin).concat([_.extend({}, returnInterp)]);
-                    });
-                    //Condense interpretations
-                    if(interpretations.length > 1){
-                        return [{'interpretations': interpretations}];
-                    } else {
-                        return interpretations[0];
-                    }
+                    return _.flatten(_.map(langNodeInterps, function(langNodeInterp) {
+                        var returnInterp = _.extend({}, langNodeInterp);
+                        returnInterp.components = processComponents(returnInterp.components, colIdx);
+                        return _.map(processComponents(components.slice(0, -1), langNodeInterp.origin), function(interpretation){
+                            return interpretation.concat(returnInterp);
+                        });
+                    }), true);
                 } else if('regex' in component) {
                     //TODO
                 } else {
@@ -88,7 +90,7 @@ module.exports = {
                 throw "Unknown component type:\n" + component;
             }
         }
-        return processComponents([{category : 'GAMMA'}], chart.length - 1);
+        return processComponents([{category : 'GAMMA'}], chart.length - 1)[0][0].components;
     },
     parse : function (input, startCategory, collection, callback) {
         if(!input) {

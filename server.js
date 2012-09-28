@@ -6,7 +6,7 @@ var assert = require('assert');
 
 var Handlebars = require('handlebars');
 Handlebars.registerHelper('stringify', function(object) {
-    return JSON.stringify(object);
+    return JSON.stringify(_.extend({}, object), 2, 4);
 });
 //Database:
 var mongo = require('mongoskin');
@@ -17,12 +17,13 @@ var pipette = require('pipette');
 
 var config = require('./config');
 var langNodes = require('./langNodes');
-//var earley = require('./earley');
+var EarleyParser = require('./earley');
 
 //  Local cache for static content [fixed and loaded at startup]
 var zcache = {};
-zcache.indexTemplate = Handlebars.compile(fs.readFileSync('index.html', encoding='utf8'));
-zcache.resultsTemplate = Handlebars.compile(fs.readFileSync('results.html', encoding='utf8'));
+zcache.indexTemplate = Handlebars.compile(fs.readFileSync('index.html', 'utf8'));
+zcache.resultsTemplate = Handlebars.compile(fs.readFileSync('results.html', 'utf8'));
+zcache.parseChartTemplate = Handlebars.compile(fs.readFileSync('parseChart.html', 'utf8'));
 
 // Create "express" server.
 var app  = express.createServer();
@@ -61,217 +62,10 @@ app.get('/dbgf', function(req, res) {
     return;
 });
 
-
-/*
-function addToSet(item, arraySet) {
-    if(_.any(arraySet, function(setItem){ return item === setItem; })) {
-        //no-op
-    } else {
-        arraySet.push(item);
-    }
-}
-*/
 function isIncomplete(langNode) {
     return (langNode.atComponent < langNode.components.length);
 }
-var EventEmitter = require( "events" ).EventEmitter;
 
-//Earley parser refrences I studied:
-//http://en.wikipedia.org/wiki/Earley_parser
-//http://www1.icsi.berkeley.edu/~stolcke/papers/cl95/paper-html.html
-//https://github.com/tomerfiliba/tau/blob/master/earley3.py
-//http://stevehanov.ca/qb.js/EarleyParser.js
-
-//My Earley parser differs from the standard version in it's use of
-//node.js's asynchronous capabilities.
-//Each token is a pool that the predictions flow through, or something like that.
-//I still don't feel like I fully understand it.
-var EarleyParser = {
-    chartToTree : function (chart) {
-        /*
-        var gammaState = chart.slice(-1).find(function(state){
-            return state.category === 'GAMMA';
-        });
-        var component = components.slice(-1);
-        */
-        function processComponents(components, colIdx) {
-            if(components.length === 0 || colIdx <= 0){//colIdx?
-                return [];
-            }
-            var returnComponent;
-            var component = components.slice(-1)[0];
-            if(_.isString(component)) {
-                return processComponents(components.slice(0, -1), colIdx - component.length).concat([component]);
-            } else if(_.isObject(component)) {
-                if('category' in component) { //categories are non-terminals
-                    returnComponent = Object.create(component);
-                    returnComponent.interpretations = _.filter(chart[colIdx], function(state) {
-                        return (state.category === component.category) && !isIncomplete(state);
-                    });
-                    returnComponent.interpretations = _.map(returnComponent.interpretations, function(interpretation) {
-                        var returnInterp = Object.create(interpretation);
-                        returnInterp.components = processComponents(interpretation.components, colIdx);
-                        return processComponents(components.slice(0, -1), interpretation.origin - 1).concat([_.extend({}, interpretation)]);
-                    });
-                    return [_.extend({}, returnComponent)];
-                    //return processComponents(components.slice(0, -1), component.origin - 1).concat([_.extend({}, returnComponent)]);
-                } else if('regex' in component) {
-                    //TODO
-                } else {
-                    throw "Unknown component type:\n" + JSON.stringify(component);
-                }
-            } else {
-                throw "Unknown component type:\n" + component;
-            }
-        }
-        return processComponents([{category : 'GAMMA'}], chart.length - 1);
-    },
-    parse : function (input, startCategory, collection, callback) {
-        if(!input) {
-            callback('No input');
-            return;
-        }
-        if(!startCategory) {
-            callback('No start category');
-            return;
-        }
-        //Note, an emptystring is added to the end of the input array bc
-        //the scanner might try to add things when it's on the last char.
-        var splitInput = input.split('').concat(['']);
-        console.log(splitInput);
-        var chart = _.map(splitInput, function(){
-            return [];
-        });
-        var statePools = [];
-        var finishCounter = splitInput.length;
-        function finishListener() {
-            console.log("finish");
-            finishCounter--;
-            if(finishCounter <= 0){
-                callback(null, chart);
-            }
-        }
-        //This is async.
-        function predictor(catComponent, j) {
-            console.log("predictor: category: " + catComponent.category);
-            collection.find({ 'category' : catComponent.category }).toArray(function(err, array) {
-                if (err) throw err;//TODO: Missing categories might be an issue, but perhaps this is only for db errors.
-                _.each(array, function(langNode){
-                    langNode.atComponent = 0;
-                    langNode.stringIdx = 0;
-                    langNode.origin = j;
-                    statePools[j].emit('add', langNode);
-                });
-                //I'm assuming that emited events happen in order or emission.
-                statePools[j].emit('done');
-            });
-        }
-        function scanner(langNode, j) {
-            console.log("scanner");
-            console.log(langNode);
-            var component = langNode.components[langNode.atComponent];
-            if(input[j] === component[langNode.stringIdx]) {
-                langNode = Object.create(langNode);
-                langNode.stringIdx++;
-                if(langNode.stringIdx >= component.length) {
-                    langNode.atComponent++;
-                    langNode.stringIdx = 0;
-                }
-                statePools[j+1].emit('add', langNode);
-            }
-            statePools[j].emit('done');
-        }
-        function completer(langNode, j) {
-            console.log("completer");
-            //TODO: This is probably a bug, the chart might not be fully filled out.
-            _.each(chart[langNode.origin], function(originLN, idx) {
-                var originComponent = originLN.components[originLN.atComponent];
-                //This assumes we are completing non-terminals.
-                if(originComponent.category === langNode.category) {
-                    //Make a new state from the origin state
-                    originLN = Object.create(originLN);
-                    originLN.atComponent++;
-                    statePools[j].emit('add', originLN);
-                }
-            });
-            statePools[j].emit('done');
-        }
-        _.each(splitInput, function(character, idx) {
-            var statePool = new EventEmitter();
-            var counter = 0;
-            var prevPoolFinished = false;
-            if(idx > 0){
-                statePools[idx-1].on('finish', function(){
-                    prevPoolFinished = true;
-                    if( counter === 0 ){
-                        statePool.emit('empty');
-                    }
-                });
-            } else {
-                prevPoolFinished = true;
-            }
-            statePool.on('finish', finishListener);
-            statePool.on('done', function(){
-                console.log("done");
-                counter--;
-                if( counter === 0 ){
-                    statePool.emit('empty');
-                }
-            });
-            statePool.on('empty', function(){
-                console.log("empty");
-                if( prevPoolFinished ){
-                    statePool.emit('finish');
-                }
-            });
-            statePool.on('add', function(langNode) {
-                console.log("Adding:");
-                console.log(_.extend({}, langNode));
-                var currentComponent;
-                //Make sure the item is unique.
-                if(_.any(chart[idx], function(item){
-                        if(langNode.atComponent === item.atComponent){
-                            if(langNode.stringIdx === item.stringIdx){
-                                if(langNode.category === item.category){
-                                    return _.isEqual(langNode.components, item.components);
-                                }
-                            }
-                        }
-                        return false;
-                    })) {
-                    console.log("duplicate found");
-                    return;
-                }
-                counter++;
-                chart[idx].push(langNode);
-                if(isIncomplete(langNode)) {
-                    currentComponent = langNode.components[langNode.atComponent];
-                    if(_.isString(currentComponent)) { //TODO: Strings are teminals.
-                         scanner(langNode, idx);
-                    } else if(_.isObject(currentComponent)) {
-                        if('category' in currentComponent) { //categories are non-terminals
-                            predictor(currentComponent, idx);
-                        } else if('regex' in currentComponent) {
-                            //TODO
-                        } else {
-                            throw "Unknown component type:\n" + JSON.stringify(currentComponent);
-                        }
-                    }
-                } else {
-                    completer(langNode, idx);
-                }
-            }); 
-            statePools.push(statePool);
-        });
-        statePools[0].emit('add', {
-            'category' : 'GAMMA',
-            'components' : [{'category' : startCategory}],
-            'atComponent' : 0,
-            'stringIdx' : 0,
-            'origin': 0
-        });
-    }
-};
 /*
 app.get('/category/:category', function(req, res){
     //TODO: Check that the category exists.
@@ -290,6 +84,19 @@ app.get('/category/:category', function(req, res){
 });
 */
 
+function renderChart(input, chart){
+    return zcache.parseChartTemplate({
+        columns : _.map(chart, function(col, colIdx) {
+            return _.map(col, function(item){
+                return _.extend(item, {
+                    complete: !isIncomplete(item),
+                    colspan: colIdx - item.origin
+                    });
+            });
+        }),
+        symbols: input.split('')
+    });
+}
 app.get('/category/:category', function(req, res){
     //TODO: Check that the category exists.
     var renderedTemplate;
@@ -300,14 +107,25 @@ app.get('/category/:category', function(req, res){
                 res.send(String(err));
                 return;
             }
-            /*
-            res.send('<pre>'+JSON.stringify(_.map(chart, function(col) {
-                return _.map(col, function(item){
-                    return _.extend({}, item);
+            if('chart' in req.query){
+                res.send(renderChart(req.query.q, chart));
+            } else if( 'json' in req.query) {
+                res.send('<pre>'+JSON.stringify(EarleyParser.chartToTree(chart), 2, 4)+'</pre>');
+            } else {
+                var parseTree, parseId, context;
+                parseTree = EarleyParser.chartToTree(chart);
+                //var BSON = mongo.BSONPure;
+                parseId = new mongo.ObjectID();
+                console.log(parseId);
+                context = {'_id': parseId, 'parseTree': parseTree, 'query': req.query.q};
+                db.collection('parses').insert(context, {
+                    safe: true
+                }, function(err, result) {
+                    assert.equal(null, err);
+                    renderedTemplate = zcache.resultsTemplate(context);
+                    res.send(renderedTemplate);
                 });
-            }), 2, 4)+'</pre>');
-            */
-            res.send('<pre>'+JSON.stringify(EarleyParser.chartToTree(chart), 2, 4)+'</pre>');
+            }
          });
     } else {
         renderedTemplate = zcache.indexTemplate({'category' : category});
@@ -514,6 +332,7 @@ app.listen(port, ipaddr, function() {
     var reinit = true;
     db = mongo.db(config.databaseUrl);
     db.createCollection('files', function(err, collection) {});
+    db.createCollection('parses', function(err, collection) {});
     db.createCollection('langNodes', function(err, collection) {
         if(reinit){
             db.collection('langNodes').remove(function() {
