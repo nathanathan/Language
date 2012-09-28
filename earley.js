@@ -61,7 +61,7 @@ module.exports = {
             }
         }
         var interpretationsTree = processComponents([{category : 'GAMMA'}], chart.length - 1)[0][0];
-        if('interpretations' in interpretationsTree){
+        if(interpretationsTree){
             return _.flatten(interpretationsTree.interpretations, true);
         } else {
             return interpretationsTree;
