@@ -90,7 +90,12 @@ module.exports = {
                 throw "Unknown component type:\n" + component;
             }
         }
-        return _.flatten(processComponents([{category : 'GAMMA'}], chart.length - 1)[0][0].interpretations, true);
+        var interpretationsTree = processComponents([{category : 'GAMMA'}], chart.length - 1)[0][0];
+        if('interpretations' in interpretationsTree){
+            return _.flatten(interpretationsTree.interpretations, true);
+        } else {
+            return interpretationsTree;
+        }
     },
     parse : function (input, startCategory, collection, callback) {
         if(!input) {

@@ -327,9 +327,8 @@ process.on('exit', function() { terminator(); });
     process.on(element, function() { terminator(element); });
 });
 
-
 //Question: What is the ideal place to connect to the db
-app.listen(port, ipaddr, function() {
+app.listen(port, ipaddr, function() { 
     var reinit = true;
     db = mongo.db(config.databaseUrl);
     db.createCollection('files', function(err, collection) {});
