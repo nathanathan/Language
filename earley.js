@@ -6,7 +6,7 @@ function isIncomplete(langNode) {
     return (langNode.atComponent < langNode.components.length);
 }
 //Thanks to Luke Z. for suggesting the Earley parser to me.
-//The thing that makes it great for my purposes is that it doesn't have to look at all the non-terminals,
+//The thing that makes it great for this purpose is that it doesn't have to look at all the non-terminals in the grammar,
 //but it still has reasonable time complexity in the size of the input string.
 //Earley parser refrences I studied:
 //http://en.wikipedia.org/wiki/Earley_parser
@@ -19,45 +19,14 @@ function isIncomplete(langNode) {
 //I still don't feel like I fully understand it.
 module.exports = {
     /**
-     * chartToTree has issues.
-     * 1. I'm sure it's quite inefficient.
-     * 2. It's probably possible to slightly modify the parse function to generate tree stuff,
-     *    however, I don't want to make that any more complex that it already is.
-     * 3. The structure of "interpretations" is ambiguous. For example, ambiguous ABC could be:
-
-     *      interpretations: [
-     *          {components: [A1, 
-     *              {
-     *                  interpretations: [{components: [B1 ,C1]}]
-     *              }
-     *          ]},
-     *          {components: [A2, 
-     *              {
-     *                  interpretations: [{components: [B2 ,C2]}]
-     *              }
-     *          ]},
-     *      ]
-     * or
-     *      interpretations: [
-     *          {components: [
-     *              {
-     *                  interpretations: [{components: [A1 ,B1]}]
-     *              }, C1
-     *          ]},
-     *          {components: [
-     *              {
-     *                  interpretations: [{components: [A2 ,B2]}]
-     *              }, C2
-     *          ]},
-     *      ]
-     * To avoid ambiguity and dealing with nested interpretations we can make a forest with every full parse tree, but that could get pretty big.
-     * For now I'm grouping interpretations to the left.
-     * 
-     * Nevermind! I'm really tired right now but I have an idea that seems to make more sence
-     * where interpretations apply to the whole component array.
+     * chartToInterpretationTree converts a parse chart to a tree of langNodes with "interpretations" properties.
+     * Interpretations is an array of component arrays.
+     *    It might be possible to slightly modify the parse function to generate an interpretation tree more efficiently
+     *    however, I don't want to make parse any more complex that it already is at this point.
+     *    With some query statistics it could even become possible to further prune the grammer by leaving out
+     *    highly imporobable parses.
      */
     chartToInterpretationTree : function (chart) {
-         //Try to find all the components' childen in the chart starting at colIdx and progressing left.
          //Returns an array of interpretations. Each interpretation is a corresponding array of components.
         function processComponents(components, colIdx) {
             var component, langNodeInterps;
@@ -74,6 +43,7 @@ module.exports = {
                     langNodeInterps = _.filter(chart[colIdx], function(langNode) {
                         return (langNode.category === component.category) && !isIncomplete(langNode);
                     });
+                    if(langNodeInterps.length === 0 ) return [[]];
                     return _.flatten(_.map(langNodeInterps, function(langNodeInterp) {
                         var returnInterp = _.extend({}, langNodeInterp);
                         returnInterp.interpretations = processComponents(returnInterp.components, colIdx);
