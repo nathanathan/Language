@@ -12,7 +12,7 @@
         <input value="{{query}}" style="width:30em"></input>
         <button type="submit" value="interpret">interpret</button>
     </div>
-    {{#each parseTree.interpretations}}
+    {{#each interpretationTree}}
         <div class='interpretation'>
         	<iframe class="content" src="../display/{{_id}}?parseId={{../_id}}"></iframe>
     		<div class="vote">

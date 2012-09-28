@@ -56,7 +56,7 @@ module.exports = {
      * Nevermind! I'm really tired right now but I have an idea that seems to make more sence
      * where interpretations apply to the whole component array.
      */
-    chartToTree : function (chart) {
+    chartToInterpretationTree : function (chart) {
          //Try to find all the components' childen in the chart starting at colIdx and progressing left.
          //Returns an array of interpretations. Each interpretation is a corresponding array of components.
         function processComponents(components, colIdx) {
@@ -76,7 +76,7 @@ module.exports = {
                     });
                     return _.flatten(_.map(langNodeInterps, function(langNodeInterp) {
                         var returnInterp = _.extend({}, langNodeInterp);
-                        returnInterp.components = processComponents(returnInterp.components, colIdx);
+                        returnInterp.interpretations = processComponents(returnInterp.components, colIdx);
                         return _.map(processComponents(components.slice(0, -1), langNodeInterp.origin), function(interpretation){
                             return interpretation.concat(returnInterp);
                         });
@@ -90,7 +90,7 @@ module.exports = {
                 throw "Unknown component type:\n" + component;
             }
         }
-        return _.flatten(processComponents([{category : 'GAMMA'}], chart.length - 1)[0][0].components, true);
+        return _.flatten(processComponents([{category : 'GAMMA'}], chart.length - 1)[0][0].interpretations, true);
     },
     parse : function (input, startCategory, collection, callback) {
         if(!input) {

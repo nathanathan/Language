@@ -110,18 +110,19 @@ app.get('/category/:category', function(req, res){
             if('chart' in req.query){
                 res.send(renderChart(req.query.q, chart));
             } else if( 'json' in req.query) {
-                res.send('<pre>'+JSON.stringify(EarleyParser.chartToTree(chart), 2, 4)+'</pre>');
+                res.send('<pre>'+JSON.stringify(EarleyParser.chartToInterpretationTree(chart), 2, 4)+'</pre>');
             } else {
-                var parseTree, parseId, context;
-                parseTree = EarleyParser.chartToTree(chart);
+                var interpretationTree, parseId, context;
+                interpretationTree = EarleyParser.chartToInterpretationTree(chart);
                 //var BSON = mongo.BSONPure;
                 parseId = new mongo.ObjectID();
                 console.log(parseId);
-                context = {'_id': parseId, 'parseTree': parseTree, 'query': req.query.q};
+                context = {'_id': parseId, 'interpretationTree': interpretationTree, 'query': req.query.q};
                 db.collection('parses').insert(context, {
                     safe: true
                 }, function(err, result) {
                     assert.equal(null, err);
+                    console.log(context);
                     renderedTemplate = zcache.resultsTemplate(context);
                     res.send(renderedTemplate);
                 });
