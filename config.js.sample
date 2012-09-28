@@ -1,0 +1,1 @@
+exports.databaseUrl = "user:password@mongohq.com:port/databasename";
