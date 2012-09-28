@@ -14,7 +14,7 @@
     </div>
     {{#each parseTree.interpretations}}
         <div class='interpretation'>
-        	<iframe class="content" src="../display/{{_id}}?parseId={{../parseId}}"></iframe>
+        	<iframe class="content" src="../display/{{_id}}?parseId={{../_id}}"></iframe>
     		<div class="vote">
     			<a class="upvote votebtn"
                     href="../upvote/{{_id}}?parseId={{../_id}}"

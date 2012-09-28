@@ -90,7 +90,7 @@ module.exports = {
                 throw "Unknown component type:\n" + component;
             }
         }
-        return processComponents([{category : 'GAMMA'}], chart.length - 1)[0][0].components;
+        return _.flatten(processComponents([{category : 'GAMMA'}], chart.length - 1)[0][0].components, true);
     },
     parse : function (input, startCategory, collection, callback) {
         if(!input) {
