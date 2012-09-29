@@ -9,12 +9,21 @@
 <body>
     <div class="header">
         <h1>Language</h1>
+        <form action="{{category}}">
         <input value="{{query}}" style="width:30em"></input>
         <button type="submit" value="interpret">interpret</button>
+        </form>
+        <div style="float:right;">category: {{category}}</div>
     </div>
     {{#each interpretationTree}}
         <div class='interpretation'>
-        	<iframe class="content" src="../display/{{_id}}?parseId={{../_id}}"></iframe>
+        	<iframe class="content"
+            {{#if url}}
+                src="{{url}}?parseId={{../_id}}"
+            {{#else}}
+                src="../files/{{_id}}?parseId={{../_id}}"
+            {{/if}}
+            ></iframe>
     		<div class="vote">
     			<a class="upvote votebtn"
                     href="../upvote/{{_id}}?parseId={{../_id}}"

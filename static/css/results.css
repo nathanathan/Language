@@ -1,7 +1,20 @@
+:root{
+    height: 100%;
+	min-height: 500px;
+background: #f9f9f9; /* Old browsers */
+background: -moz-linear-gradient(-45deg,  #f9f9f9 23%, #ffac59 44%, #f27e54 72%); /* FF3.6+ */
+background: -webkit-gradient(linear, left top, right bottom, color-stop(23%,#f9f9f9), color-stop(44%,#ffac59), color-stop(72%,#f27e54)); /* Chrome,Safari4+ */
+background: -webkit-linear-gradient(-45deg,  #f9f9f9 23%,#ffac59 44%,#f27e54 72%); /* Chrome10+,Safari5.1+ */
+background: -o-linear-gradient(-45deg,  #f9f9f9 23%,#ffac59 44%,#f27e54 72%); /* Opera 11.10+ */
+background: -ms-linear-gradient(-45deg,  #f9f9f9 23%,#ffac59 44%,#f27e54 72%); /* IE10+ */
+background: linear-gradient(135deg,  #f9f9f9 23%,#ffac59 44%,#f27e54 72%); /* W3C */
+filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#f9f9f9', endColorstr='#f27e54',GradientType=1 ); /* IE6-9 fallback on horizontal gradient */
+}
 .interpretation{
 	margin-left:auto;
 	margin-right:auto;
     margin-top:1em;
+    background-color: white;
 	border: 1px solid black;
 	-moz-border-radius: 1em;
 	border-radius: 1em;

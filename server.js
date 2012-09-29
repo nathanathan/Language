@@ -61,6 +61,21 @@ app.get('/dbgf', function(req, res) {
     });
     return;
 });
+/**
+ * It might be desirable to have widget html served from this server for a few reasons:
+ * -Widgets can be server-side templates.
+ * -Gists can't be hosted on gh-pages, and I want them to be very easy to use.
+ * -There could be some origin issues.
+ **/
+app.get('/pages/:id', function(req, res) {
+    db.collection('files').findById(req.params.id, function(err, langNodeFiles){
+        if(err) throw err;
+        //res.writeHead(200, {'Content-Type': 'text/plain'});
+        res.send(JSON.stringify(langNodeFiles.files));
+    });
+    //TODO: Default page for file not found
+    return;
+});
 
 function isIncomplete(langNode) {
     return (langNode.atComponent < langNode.components.length);
@@ -117,7 +132,12 @@ app.get('/category/:category', function(req, res){
                 //var BSON = mongo.BSONPure;
                 parseId = new mongo.ObjectID();
                 console.log(parseId);
-                context = {'_id': parseId, 'interpretationTree': interpretationTree, 'query': req.query.q};
+                context = {
+                    '_id': parseId,
+                    'interpretationTree': interpretationTree,
+                    'query': req.query.q,
+                    'category': category
+                };
                 db.collection('parses').insert(context, {
                     safe: true
                 }, function(err, result) {
