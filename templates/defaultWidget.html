@@ -8,8 +8,7 @@
     <script type="text/javascript" src="../libs/jQuery-URL-Parser/purl.js"></script>
     <script>
     $.ready(function(){
-        $('.content').text($.url().attr('parseId'));
-        
+        $('.content').text($.url().param('parseId'));
     });
     </script>
 </head>
