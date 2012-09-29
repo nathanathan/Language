@@ -13,7 +13,8 @@
         <input value="{{query}}" style="width:30em"></input>
         <button type="submit" value="interpret">interpret</button>
         </form>
-        <div style="float:right;">category: {{category}}</div>
+        <div class="category">category: {{category}}</div>
+        <div><!-- this div is for category alignment --></div>
     </div>
     {{#each interpretationTree}}
         <div class='interpretation'>
@@ -21,7 +22,7 @@
             {{#if url}}
                 src="{{url}}?parseId={{../_id}}"
             {{else}}
-                src="../sites/{{_id}}?parseId={{../_id}}"
+                src="../pages/{{_id}}?parseId={{../_id}}"
             {{/if}}
             ></iframe>
     		<div class="vote">

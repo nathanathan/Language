@@ -21,9 +21,10 @@ var EarleyParser = require('./earley');
 
 //  Local cache for static content [fixed and loaded at startup]
 var zcache = {};
-zcache.indexTemplate = Handlebars.compile(fs.readFileSync('index.html', 'utf8'));
-zcache.resultsTemplate = Handlebars.compile(fs.readFileSync('results.html', 'utf8'));
-zcache.parseChartTemplate = Handlebars.compile(fs.readFileSync('parseChart.html', 'utf8'));
+zcache.indexTemplate = Handlebars.compile(fs.readFileSync('templates/index.html', 'utf8'));
+zcache.resultsTemplate = Handlebars.compile(fs.readFileSync('templates/results.html', 'utf8'));
+zcache.parseChartTemplate = Handlebars.compile(fs.readFileSync('templates/parseChart.html', 'utf8'));
+zcache.defaultWidget = Handlebars.compile(fs.readFileSync('templates/defaultWidget.html', 'utf8'));
 
 // Create "express" server.
 var app  = express.createServer();
