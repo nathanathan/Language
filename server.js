@@ -1,4 +1,5 @@
 #!/bin/env node
+
 var express = require('express');
 var fs      = require('fs');
 var _ = require('underscore')._;
@@ -111,6 +112,7 @@ function renderChart(input, chart){
         symbols: input.split('')
     });
 }
+
 app.get('/category/:category', function(req, res){
     //TODO: Check that the category exists.
     var renderedTemplate;
