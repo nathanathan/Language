@@ -12,13 +12,13 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#f9f9f9', end
 }
 .header{
     background-color: white;
-    -webkit-box-shadow: 0px 8px 100px 100px #ffefc1;
-    box-shadow: 0px 8px 100px 100px #ffefc1;
+    -webkit-box-shadow: 0px 8px 100px 100px ##FFBC69;
+    box-shadow: 0px 8px 100px 100px ##FFBC69;
     
     vertical-align: middle;
     padding-bottom: 1em;
     margin-bottom: 1em;
-    border-bottom: 1px solid gray;
+    border-bottom: 1px solid crimson;
 }
 .header > *{
     vertical-align: middle;
