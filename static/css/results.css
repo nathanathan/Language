@@ -11,14 +11,15 @@ background: linear-gradient(135deg,  #f9f9f9 23%,#ffac59 44%,#f27e54 72%); /* W3
 filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#f9f9f9', endColorstr='#f27e54',GradientType=1 ); /* IE6-9 fallback on horizontal gradient */
 }
 .header{
-    background-color: white;
-    -webkit-box-shadow: 0px 8px 100px 100px ##FFBC69;
-    box-shadow: 0px 8px 100px 100px ##FFBC69;
-    
+    /*
+    background-color: #FFBC69;
+    -webkit-box-shadow: 0px 8px 100px 100px #FFBC69;
+    box-shadow: 0px 8px 100px 100px #FFBC69;
+    */
     vertical-align: middle;
     padding-bottom: 1em;
     margin-bottom: 1em;
-    border-bottom: 1px solid crimson;
+    border-bottom: 1px solid darkred;
 }
 .header > *{
     vertical-align: middle;

@@ -15,29 +15,29 @@
         </form>
         <div><div class="category">category: {{category}}</div></div>
     </div>
-    {{#each interpretationTree}}
+    {{#each interpretations}}
         <div class='interpretation'>
         	<iframe class="content"
-            {{#if url}}
-                src="{{url}}?parseId={{../_id}}"
+            {{#if root.url}}
+                src="{{root.url}}?interpId={{_id}}"
             {{else}}
-                src="../pages/{{_id}}?parseId={{../_id}}"
+                src="../pages/{{root._id}}?interpId={{_id}}"
             {{/if}}
             ></iframe>
     		<div class="vote">
     			<a class="upvote votebtn"
-                    href="../upvote/{{_id}}?parseId={{../_id}}"
+                    href="../upvote/{{root._id}}?interpId={{_id}}"
                     title="Up vote (click again to undo)">up vote</a>
     			<span>|</span>
     			<a class="downvote votebtn"
-                    href="../downvote/{{_id}}?parseId={{../_id}}"
+                    href="../downvote/{{root._id}}?interpId={{_id}}"
                     title="Down vote (click again to undo)">down vote</a>
                 {{#if repository.type}}
-    			    <a class="source" href="https://gist.github.com/{{repository.gistId}}">view source</a>
+    			    <a class="source" href="https://gist.github.com/{{root.repository.gistId}}">view source</a>
                 {{/if}}
     		</div>
         </div>
     {{/each}}
-    <button>Load more interpretations</button>
+    <center><button>Load more interpretations</button></center>
 </body>
 </html>

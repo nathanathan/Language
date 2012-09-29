@@ -86,24 +86,6 @@ function isIncomplete(langNode) {
     return (langNode.atComponent < langNode.components.length);
 }
 
-/*
-app.get('/category/:category', function(req, res){
-    //TODO: Check that the category exists.
-    var renderedTemplate;
-    var category = req.params.category;
-    if('q' in req.query){
-        db.collection('langNodes').find().toArray(function(err, items) {
-            if(err) throw err;
-            renderedTemplate = zcache.resultsTemplate({interpretations: items, parseId:123, query: req.query.q});
-            res.send(renderedTemplate);
-        });
-    } else {
-        renderedTemplate = zcache.indexTemplate({'category' : category});
-        res.send(renderedTemplate);
-    }
-});
-*/
-
 function renderChart(input, chart){
     return zcache.parseChartTemplate({
         columns : _.map(chart, function(col, colIdx) {
@@ -122,7 +104,22 @@ app.get('/category/:category', function(req, res){
     var renderedTemplate;
     var category = req.params.category;
     if('q' in req.query){
-         EarleyParser.parse(req.query.q, category, db.collection('langNodes'), function(err, chart){
+        var queryId = new mongo.ObjectID();
+        db.collection('queries').insert({
+            '_id': queryId,
+            'query': req.query.q,
+            'category': category,
+            'timestamp': String(new Date())
+        }, 
+        { safe: true }, 
+        function(err, result){
+            if(err){
+                //If this happens there are problems I haven't thought about.
+                res.send(String(err));
+                return;
+            }
+        });
+        EarleyParser.parse(req.query.q, category, db.collection('langNodes'), function(err, chart){
             if(err){
                 res.send(String(err));
                 return;
@@ -132,23 +129,27 @@ app.get('/category/:category', function(req, res){
             } else if( 'json' in req.query) {
                 res.send('<pre>'+JSON.stringify(EarleyParser.chartToInterpretationTree(chart), 2, 4)+'</pre>');
             } else {
-                var interpretationTree, parseId, context;
-                interpretationTree = EarleyParser.chartToInterpretationTree(chart);
-                //var BSON = mongo.BSONPure;
-                parseId = new mongo.ObjectID();
-                console.log(parseId);
-                context = {
-                    '_id': parseId,
-                    'interpretationTree': interpretationTree,
-                    'query': req.query.q,
-                    'category': category
-                };
-                db.collection('parses').insert(context, {
+                var interpretations;
+                interpretations = EarleyParser.chartToInterpretationTree(chart);
+                interpretations = _.map(interpretations, function(interpretation){
+                    return {
+                        '_id': new mongo.ObjectID(),
+                        'root': interpretation,
+                        'queryId': queryId
+                    };
+                });
+                db.collection('interpretations').insert(interpretations, {
                     safe: true
                 }, function(err, result) {
-                    assert.equal(null, err);
-                    console.log(context);
-                    renderedTemplate = zcache.resultsTemplate(context);
+                    if(err){
+                        res.send(String(err));
+                        return;
+                    }
+                    renderedTemplate = zcache.resultsTemplate({
+                        'interpretations': interpretations,
+                        'query': req.query.q,
+                        'category': category
+                    });
                     res.send(renderedTemplate);
                 });
             }
@@ -158,17 +159,6 @@ app.get('/category/:category', function(req, res){
         res.send(renderedTemplate);
     }
 });
-/*
-app.get('/', function(req, res){
-    EarleyParser.parse('test', 'general', db.collection('langNodes'), function(err, parseTree){
-        if(err){
-            res.send(String(err));
-            return;
-        }
-        res.send('<pre>'+JSON.stringify(parseTree, 2, 4)+'</pre>');
-    });
-});
-*/
 // Handler for GET /
 app.get('/', function(req, res){
     var renderedTemplate;
@@ -357,7 +347,8 @@ app.listen(port, ipaddr, function() {
     var reinit = true;
     db = mongo.db(config.databaseUrl);
     db.createCollection('files', function(err, collection) {});
-    db.createCollection('parses', function(err, collection) {});
+    db.createCollection('interpretations', function(err, collection) {});
+    db.createCollection('queries', function(err, collection) {});
     db.createCollection('langNodes', function(err, collection) {
         if(reinit){
             db.collection('langNodes').remove(function() {

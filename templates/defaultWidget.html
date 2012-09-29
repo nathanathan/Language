@@ -8,10 +8,10 @@
     <script type="text/javascript" src="../libs/jQuery-URL-Parser/purl.js"></script>
     <script>
     $(function(){
-        var parseId = $.url().param('parseId');
-        $('.content').text(parseId);
+        var interpId = $.url().param('interpId');
+        $('.content').text(interpId);
         //TODO: Add this to the server
-        $.getJSON('../parses/' + parseId, function(data) {
+        $.getJSON('../parses/' + interpId, function(data) {
             console.log(data);
             //TODO: Render parse tree.
         });
