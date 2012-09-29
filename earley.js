@@ -19,14 +19,14 @@ function isIncomplete(langNode) {
 //I still don't feel like I fully understand it.
 module.exports = {
     /**
-     * chartToInterpretationTree converts a parse chart to a tree of langNodes with "interpretations" properties.
+     * chartToInterpretations converts a parse chart to a tree of langNodes with "interpretations" properties.
      * Interpretations is an array of component arrays.
      *    It might be possible to slightly modify the parse function to generate an interpretation tree more efficiently
      *    however, I don't want to make parse any more complex that it already is at this point.
      *    With some query statistics it could even become possible to further prune the grammer by leaving out
      *    highly imporobable parses.
      */
-    chartToInterpretationTree : function (chart) {
+    chartToInterpretations : function (chart) {
          //Returns an array of interpretations. Each interpretation is a corresponding array of components.
         function processComponents(components, colIdx) {
             var component, langNodeInterps;

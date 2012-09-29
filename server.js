@@ -62,6 +62,18 @@ app.get('/dbgf', function(req, res) {
     });
     return;
 });
+
+app.get('/interpretations/:id', function(req, res) {
+    db.collection('interpretations').findById(req.params.id, function(err, interpretation){
+        if(err) throw err;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(interpretation)); 
+    });
+    return;
+});
+
+
+
 /**
  * It might be desirable to have widget html served from this server for a few reasons:
  * -Widgets can be server-side templates.
@@ -127,10 +139,10 @@ app.get('/category/:category', function(req, res){
             if('chart' in req.query){
                 res.send(renderChart(req.query.q, chart));
             } else if( 'json' in req.query) {
-                res.send('<pre>'+JSON.stringify(EarleyParser.chartToInterpretationTree(chart), 2, 4)+'</pre>');
+                res.send('<pre>'+JSON.stringify(EarleyParser.chartToInterpretations(chart), 2, 4)+'</pre>');
             } else {
                 var interpretations;
-                interpretations = EarleyParser.chartToInterpretationTree(chart);
+                interpretations = EarleyParser.chartToInterpretations(chart);
                 interpretations = _.map(interpretations, function(interpretation){
                     return {
                         '_id': new mongo.ObjectID(),
@@ -138,20 +150,30 @@ app.get('/category/:category', function(req, res){
                         'queryId': queryId
                     };
                 });
-                db.collection('interpretations').insert(interpretations, {
-                    safe: true
-                }, function(err, result) {
-                    if(err){
-                        res.send(String(err));
-                        return;
-                    }
+                _.defer(function(){
+                    //This is deferred so it can happen whiles the interpretations are inserted.
                     renderedTemplate = zcache.resultsTemplate({
                         'interpretations': interpretations,
                         'query': req.query.q,
                         'category': category
                     });
-                    res.send(renderedTemplate);
                 });
+                if(interpretations.length > 0){
+                    db.collection('interpretations').insert(interpretations, {
+                        safe: true
+                    }, function(err, result) {
+                        if(err){
+                            res.send(String(err));
+                            return;
+                        }
+                        res.send(renderedTemplate);
+                    });
+                } else {
+                     _.defer(function(){
+                         //This is deferred so it happens after the template is rendered.
+                         res.send(renderedTemplate);
+                     });
+                }
             }
          });
     } else {

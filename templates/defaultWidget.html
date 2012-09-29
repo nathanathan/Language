@@ -9,10 +9,9 @@
     <script>
     $(function(){
         var interpId = $.url().param('interpId');
-        $('.content').text(interpId);
         //TODO: Add this to the server
-        $.getJSON('../parses/' + interpId, function(data) {
-            console.log(data);
+        $.getJSON('../interpretations/' + interpId, function(data) {
+            $('.content').text(data);
             //TODO: Render parse tree.
         });
     });
