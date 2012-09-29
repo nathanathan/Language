@@ -70,10 +70,14 @@ app.get('/dbgf', function(req, res) {
 app.get('/pages/:id', function(req, res) {
     db.collection('files').findById(req.params.id, function(err, langNodeFiles){
         if(err) throw err;
-        //res.writeHead(200, {'Content-Type': 'text/plain'});
-        res.send(JSON.stringify(langNodeFiles.files));
+        if(langNodeFiles) {
+            //res.writeHead(200, {'Content-Type': 'text/plain'});
+            res.send(JSON.stringify(langNodeFiles.files));
+        } else {
+            var renderedTemplate = zcache.defaultWidget({});
+            res.send(renderedTemplate);
+        }
     });
-    //TODO: Default page for file not found
     return;
 });
 
