@@ -25,7 +25,7 @@ var zcache = {};
 zcache.indexTemplate = Handlebars.compile(fs.readFileSync('templates/index.html', 'utf8'));
 zcache.resultsTemplate = Handlebars.compile(fs.readFileSync('templates/results.html', 'utf8'));
 zcache.parseChartTemplate = Handlebars.compile(fs.readFileSync('templates/parseChart.html', 'utf8'));
-zcache.defaultWidget = Handlebars.compile(fs.readFileSync('templates/defaultWidget.html', 'utf8'));
+zcache.defaultWidget = fs.readFileSync('defaultWidget.html', 'utf8');
 
 // Create "express" server.
 var app  = express.createServer();
@@ -88,8 +88,7 @@ app.get('/pages/:id', function(req, res) {
             //res.writeHead(200, {'Content-Type': 'text/plain'});
             res.send(JSON.stringify(langNodeFiles.files));
         } else {
-            var renderedTemplate = zcache.defaultWidget({});
-            res.send(renderedTemplate);
+            res.send(zcache.defaultWidget);
         }
     });
     return;

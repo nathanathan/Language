@@ -8,6 +8,7 @@
 :root{
 height: 100%;
 min-height: 500px;
+
 background: #f9f9f9; /* Old browsers */
 background: -moz-linear-gradient(top,  #f9f9f9 23%, #ffac59 44%, #f27e54 72%); /* FF3.6+ */
 background: -webkit-gradient(linear, left top, left bottom, color-stop(23%,#f9f9f9), color-stop(44%,#ffac59), color-stop(72%,#f27e54)); /* Chrome,Safari4+ */
@@ -17,12 +18,15 @@ background: -ms-linear-gradient(top,  #f9f9f9 23%,#ffac59 44%,#f27e54 72%); /* I
 background: linear-gradient(to bottom,  #f9f9f9 23%,#ffac59 44%,#f27e54 72%); /* W3C */
 filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#f9f9f9', endColorstr='#f27e54',GradientType=0 ); /* IE6-9 */
 }
+.category{
+    margin-bottom: 1em;
+}
 </style>
 </head>
 <body>
     <form action="/category/{{category}}"><center>
         <h1>Language</h1>
-        <div>category: {{category}}</div>
+        <div class="category">category: {{category}}</div>
 		<textarea cols="47" rows="3" name="q">How does language work?</textarea>
 		<div class="buttonHolder">
 			<button type="submit" value="interpret">interpret</button>
