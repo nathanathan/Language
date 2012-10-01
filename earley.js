@@ -148,7 +148,7 @@ module.exports = {
             _.each(chart[langNode.parseData.origin], function(originLN, idx) {
                 var originComponent = originLN.content.components[originLN.parseData.atComponent];
                 //This assumes we are completing non-terminals.
-                if(originComponent.content.category === langNode.content.category) {
+                if(originComponent.category === langNode.content.category) {
                     //Make a new state from the origin state
                     originLN.parseData = Object.create(originLN.parseData);
                     originLN.parseData.atComponent++;
