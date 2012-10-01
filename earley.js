@@ -99,7 +99,10 @@ module.exports = {
         function predictor(langNode, j) {
             var currentComponent = langNode.content.components[langNode.parseData.atComponent];
             //console.log("predictor: category: " + currentComponent.category);
-            collection.find({ content : currentComponent }).toArray(function(err, array) {
+            //I want to know why mongo uses json paths to query nested json objects rather than nested json objects.
+            //I suppose it's easier to write queries by hand, but it's so much cleaner when you generate queries in code.
+            //I hope they eventually do both.
+            collection.find({ 'content.category' : currentComponent.category }).toArray(function(err, array) {
                 if (err) throw err;//TODO: Missing categories might be an issue, but perhaps this is only for db errors.
                 _.each(array, function(cLangNode){
                     cLangNode.parseData = {
@@ -108,7 +111,7 @@ module.exports = {
                         'origin' : j
                     };
 
-                    //Putting category/components at the top level makes things easier to deal with
+                    //Putting category/components at the top level might make things easier to deal with
                     //if there are nested categories declaired inline in a langNode.json file,
                     //not that I have support for this yet.
                     cLangNode.category = cLangNode.content.category;

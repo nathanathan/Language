@@ -32,7 +32,7 @@
     			<a class="downvote votebtn"
                     href="../downvote/{{root._id}}?interpId={{_id}}"
                     title="Down vote (click again to undo)">down vote</a>
-                {{#if repository.type}}
+                {{#if root.repository.type}}
     			    <a class="source" href="https://gist.github.com/{{root.repository.gistId}}">view source</a>
                 {{/if}}
     		</div>
