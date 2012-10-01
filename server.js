@@ -94,18 +94,15 @@ app.get('/pages/:id', function(req, res) {
     return;
 });
 
-function isIncomplete(langNode) {
-    return (langNode.atComponent < langNode.components.length);
-}
-
 function renderChart(input, chart){
     return zcache.parseChartTemplate({
         columns : _.map(chart, function(col, colIdx) {
-            return _.map(col, function(item){
-                return _.extend(item, {
-                    complete: !isIncomplete(item),
-                    colspan: colIdx - item.origin
-                    });
+            return _.map(col, function(langNode){
+                return _.extend(langNode, {
+                    colspan: colIdx - langNode.parseData.origin,
+                    complete: langNode.parseData.complete,
+                    origin: langNode.parseData.origin
+                });
             });
         }),
         symbols: input.split('')

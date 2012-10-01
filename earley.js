@@ -3,7 +3,8 @@ var assert = require('assert');
 var _ = require('underscore')._;
 var EventEmitter = require( "events" ).EventEmitter;
 function isIncomplete(langNode) {
-    return (langNode.atComponent < langNode.components.length);
+    console.log('isIncomplete');
+    return (langNode.parseData.atComponent < langNode.content.components.length);
 }
 //Thanks to Luke Z. for suggesting the Earley parser to me.
 //The thing that makes it great for this purpose is that it doesn't have to look at all the non-terminals in the grammar,
@@ -42,13 +43,14 @@ module.exports = {
             } else if(_.isObject(component)) {
                 if('category' in component) {
                     langNodeInterps = _.filter(chart[colIdx], function(langNode) {
-                        return (langNode.category === component.category) && !isIncomplete(langNode);
+                        return (langNode.content.category === component.category) && langNode.parseData.complete;
                     });
                     if(langNodeInterps.length === 0 ) return [[]];
                     return _.flatten(_.map(langNodeInterps, function(langNodeInterp) {
-                        var returnInterp = _.extend({}, langNodeInterp);
-                        returnInterp.interpretations = processComponents(returnInterp.components, colIdx);
-                        return _.map(processComponents(components.slice(0, -1), langNodeInterp.origin), function(interpretation){
+                        var returnInterp = _.extend({}, langNodeInterp);//TODO: Probably not necessairy.
+                        returnInterp.interpretations = processComponents(returnInterp.content.components, colIdx);
+                        return _.map(processComponents(components.slice(0, -1), langNodeInterp.parseData.origin), function(interpretation){
+                            //TODO: remove parseData here?
                             return interpretation.concat(returnInterp);
                         });
                     }), true);
@@ -95,17 +97,24 @@ module.exports = {
         }
         //This is async.
         function predictor(langNode, j) {
-            var currentComponent = langNode.components[langNode.atComponent];
-            console.log("predictor: category: " + currentComponent.category);
-            collection.find(currentComponent).toArray(function(err, array) {
+            var currentComponent = langNode.content.components[langNode.parseData.atComponent];
+            //console.log("predictor: category: " + currentComponent.category);
+            collection.find({ content : currentComponent }).toArray(function(err, array) {
                 if (err) throw err;//TODO: Missing categories might be an issue, but perhaps this is only for db errors.
                 _.each(array, function(cLangNode){
-                    cLangNode.atComponent = 0;
-                    cLangNode.stringIdx = 0;
-                    cLangNode.origin = j;
+                    cLangNode.parseData = {
+                        'atComponent' : 0,
+                        'stringIdx' : 0,
+                        'origin' : j
+                    };
+
+                    //Putting category/components at the top level makes things easier to deal with
+                    //if there are nested categories declaired inline in a langNode.json file,
+                    //not that I have support for this yet.
+                    cLangNode.category = cLangNode.content.category;
+                    cLangNode.components = cLangNode.content.components;
+
                     statePools[j].emit('add', cLangNode);
-                    //cLangNode.value = _.map(cLangNode.components, function(){return [];});
-                    //langNode.value[langNode.atComponent].push(cLangNode);
                 });
                 //I'm assuming that emited events happen in order or emission.
                 statePools[j].emit('done');
@@ -114,28 +123,35 @@ module.exports = {
         function scanner(langNode, j) {
             console.log("scanner");
             console.log(langNode);
-            var component = langNode.components[langNode.atComponent];
-            if(input[j] === component[langNode.stringIdx]) {
-                langNode = Object.create(langNode);
-                langNode.stringIdx++;
-                if(langNode.stringIdx >= component.length) {
-                    langNode.atComponent++;
-                    langNode.stringIdx = 0;
+            var component = langNode.content.components[langNode.parseData.atComponent];
+            if(input[j] === component[langNode.parseData.stringIdx]) {
+                langNode.parseData = Object.create(langNode.parseData);
+                langNode.parseData.stringIdx++;
+                if(langNode.parseData.stringIdx >= component.length) {
+                    langNode.parseData.atComponent++;
+                    langNode.parseData.stringIdx = 0;
+                    if(langNode.parseData.atComponent >= langNode.content.components.length) {
+                        langNode.parseData.complete = true;
+                    }
                 }
                 statePools[j+1].emit('add', langNode);
             }
             statePools[j].emit('done');
         }
+        //this is probably going to be async cause of the lookback
         function completer(langNode, j) {
             console.log("completer");
             //TODO: This is probably a bug, the chart might not be fully filled out.
-            _.each(chart[langNode.origin], function(originLN, idx) {
-                var originComponent = originLN.components[originLN.atComponent];
+            _.each(chart[langNode.parseData.origin], function(originLN, idx) {
+                var originComponent = originLN.content.components[originLN.parseData.atComponent];
                 //This assumes we are completing non-terminals.
-                if(originComponent.category === langNode.category) {
+                if(originComponent.content.category === langNode.content.category) {
                     //Make a new state from the origin state
-                    originLN = Object.create(originLN);
-                    originLN.atComponent++;
+                    originLN.parseData = Object.create(originLN.parseData);
+                    originLN.parseData.atComponent++;
+                    if(originLN.parseData.atComponent >= originLN.content.components.length) {
+                        originLN.parseData.complete = true;
+                    }
                     statePools[j].emit('add', originLN);
                 }
             });
@@ -143,7 +159,7 @@ module.exports = {
         }
         _.each(splitInput, function(character, idx) {
             var statePool = new EventEmitter();
-            var counter = 0;
+            var counter = 0;//counts items remaining the the pool
             var prevPoolFinished = false;
             if(idx > 0){
                 statePools[idx-1].on('finish', function(){
@@ -174,11 +190,12 @@ module.exports = {
                 console.log(_.extend({}, langNode));
                 var currentComponent;
                 //Make sure the item is unique.
+                //TODO: Make unit tested function for node comparison.
                 if(_.any(chart[idx], function(item){
-                        if(langNode.atComponent === item.atComponent){
-                            if(langNode.stringIdx === item.stringIdx){
-                                if(langNode.category === item.category){
-                                    return _.isEqual(langNode.components, item.components);
+                        if(langNode.parseData.atComponent === item.parseData.atComponent){
+                            if(langNode.parseData.stringIdx === item.parseData.stringIdx){
+                                if(langNode.content.category === item.content.category){
+                                    return _.isEqual(langNode.content.components, item.content.components);
                                 }
                             }
                         }
@@ -189,9 +206,9 @@ module.exports = {
                 }
                 counter++;
                 chart[idx].push(langNode);
-                if(isIncomplete(langNode)) {
-                    currentComponent = langNode.components[langNode.atComponent];
-                    if(_.isString(currentComponent)) { //TODO: Strings are teminals.
+                if(!langNode.parseData.complete) {
+                    currentComponent = langNode.content.components[langNode.parseData.atComponent];
+                    if(_.isString(currentComponent)) { //strings are teminals.
                          scanner(langNode, idx);
                     } else if(_.isObject(currentComponent)) {
                         if('category' in currentComponent) { //categories are non-terminals
@@ -208,13 +225,17 @@ module.exports = {
             }); 
             statePools.push(statePool);
         });
+        //TODO: Try feeding this into predictor instead so GAMMA doesn't show up in the output.
         statePools[0].emit('add', {
-            'category' : 'GAMMA',
-            'components' : [{'category' : startCategory}],
-            'atComponent' : 0,
-            'stringIdx' : 0,
-            'origin': 0
-            //,'value': [[]]
+            'content': {
+                'category' : 'GAMMA',
+                'components' : [{'category' : startCategory}]
+            },
+            'parseData': {
+                'atComponent' : 0,
+                'stringIdx' : 0,
+                'origin': 0
+            }
         });
     }
 };

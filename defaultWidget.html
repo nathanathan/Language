@@ -9,10 +9,10 @@
     <script type="text/javascript" src="../libs/jQuery-URL-Parser/purl.js"></script>
     <style>
     .category {
-        color:green;
+        color:blue;
     }
     .details {
-        color:blue;
+        color:green;
     }
     .component {
         color:orange;
@@ -37,7 +37,7 @@
     <div class="content"></div>
     <script id="componentTemplate" type="text/x-handlebars-template">
         {{#if category}}
-            <div class="details">{{category}}</div>
+            <div class="category">{{category}}</div>
             <div class="details">{{stringify this}}</div>
             <ul>
             {{#each interpretations}}
