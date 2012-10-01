@@ -18,8 +18,8 @@
     {{#each interpretations}}
         <div class='interpretation'>
         	<iframe class="content"
-            {{#if root.url}}
-                src="{{root.url}}?interpId={{_id}}"
+            {{#if root.content.url}}
+                src="{{root.content.url}}?interpId={{_id}}"
             {{else}}
                 src="../pages/{{root._id}}?interpId={{_id}}"
             {{/if}}

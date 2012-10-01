@@ -84,9 +84,10 @@ app.get('/interpretations/:id', function(req, res) {
 app.get('/pages/:id', function(req, res) {
     db.collection('files').findById(req.params.id, function(err, langNodeFiles){
         if(err) throw err;
-        if(langNodeFiles) {
+        if(langNodeFiles && langNodeFiles.files && langNodeFiles.files['index.html']) {
             //res.writeHead(200, {'Content-Type': 'text/plain'});
-            res.send(JSON.stringify(langNodeFiles.files));
+            //TODO: Generalize this so we can serve the full gist.
+            res.send(langNodeFiles.files['index.html'].content);
         } else {
             res.send(zcache.defaultWidget);
         }
@@ -331,11 +332,15 @@ app.post('/submit', function(req, res) {
             }, {
                 upsert: true,
                 safe: true
-            }, function() {});
-            
-            //TODO: Redirect to langNode url
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(syncedNode, 2, 4));
+            }, function(err) {
+                if (err) {
+                    res.send('Error: ' + err);
+                    return;
+                }
+                //TODO: Redirect to langNode url (this could trigger syncing, and the page could indicate progress.)
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(syncedNode, 2, 4));
+            });
         });
     });
 });
