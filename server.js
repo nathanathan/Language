@@ -295,7 +295,7 @@ app.get('/langNode/:id', function(req, res) {
         });
     });
 });
-
+//TODO: Make way of submitting JSON
 app.post('/submit', function(req, res) {
     var repository = {
         type: 'gist',
@@ -332,7 +332,9 @@ app.post('/submit', function(req, res) {
                 safe: true
             }, function() {});
             
-            res.send('SYNCED:' + JSON.stringify(syncedNode));
+            //TODO: Redirect to langNode url
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(syncedNode, 2, 4));
         });
     });
 });

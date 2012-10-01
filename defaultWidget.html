@@ -20,7 +20,7 @@
     </style>
     <script>
     Handlebars.registerHelper('stringify', function(object) {
-        return JSON.stringify(_.extend({}, object), 2, 4);
+        return JSON.stringify($.extend({}, object), 2, 4);
     });
     $(function(){
         var interpId = $.url().param('interpId');

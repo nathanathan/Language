@@ -13,6 +13,7 @@ function isIncomplete(langNode) {
 //http://www1.icsi.berkeley.edu/~stolcke/papers/cl95/paper-html.html
 //https://github.com/tomerfiliba/tau/blob/master/earley3.py
 //http://stevehanov.ca/qb.js/EarleyParser.js
+//http://www.ling.helsinki.fi/kit/2008s/clt231/nltk-0.9.5/doc/en/ch08.html
 //My Earley parser differs from the standard version in it's use of
 //node.js's asynchronous capabilities.
 //Each token is a pool that the predictions flow through, or something like that.
