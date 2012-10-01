@@ -188,10 +188,10 @@ app.get('/', function(req, res){
     renderedTemplate = zcache.indexTemplate({'category' : category});
     res.send(renderedTemplate);
 });
-app.get('/upvote', function(req, res){
+app.get('/upvote/:id', function(req, res){
     res.send("Not yet implemented");
 });
-app.get('/downvote', function(req, res){
+app.get('/downvote/:id', function(req, res){
     res.send("Not yet implemented");
 });
 
@@ -248,6 +248,10 @@ app.get('/langNode/:id', function(req, res) {
     db.collection('langNodes').findById(id, function(err, langNode) {
         if (err) {
             res.send('Error: ' + err);
+            return;
+        }
+        if (langNode === null) {
+            res.send('Could not find langNode with id ' + String(id));
             return;
         }
         fetchRepo(langNode.repository, function(err, repositoryData) {
