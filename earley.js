@@ -128,6 +128,7 @@ module.exports = {
             console.log(langNode);
             var component = langNode.content.components[langNode.parseData.atComponent];
             if(input[j] === component[langNode.parseData.stringIdx]) {
+                langNode = Object.create(langNode);
                 langNode.parseData = _.clone(langNode.parseData);
                 langNode.parseData.stringIdx++;
                 if(langNode.parseData.stringIdx >= component.length) {
@@ -150,6 +151,7 @@ module.exports = {
                 //This assumes we are completing non-terminals.
                 if(originComponent.category === langNode.content.category) {
                     //Make a new state from the origin state
+                    originLN = Object.create(originLN);
                     originLN.parseData = _.clone(originLN.parseData);
                     originLN.parseData.atComponent++;
                     if(originLN.parseData.atComponent >= originLN.content.components.length) {
