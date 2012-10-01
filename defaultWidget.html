@@ -7,13 +7,26 @@
     <script src="//ajax.googleapis.com/ajax/libs/jquery/1.8.0/jquery.min.js" type="text/javascript"></script>
     <script type="text/javascript" src="../libs/handlebars-1.0.rc.1.js"></script>
     <script type="text/javascript" src="../libs/jQuery-URL-Parser/purl.js"></script>
-
+    <style>
+    .category {
+        color:green;
+    }
+    .details {
+        color:blue;
+    }
+    .component {
+        color:orange;
+    }
+    </style>
     <script>
+    Handlebars.registerHelper('stringify', function(object) {
+        return JSON.stringify(_.extend({}, object), 2, 4);
+    });
     $(function(){
         var interpId = $.url().param('interpId');
         $.getJSON('../interpretations/' + interpId, function(data) {
             //$('.content').text(data);
-            var template = Handlebars.compile($("#interpretationTemplate").html());
+            var template = Handlebars.compile($("#componentTemplate").html());
             Handlebars.registerPartial("component", $("#componentTemplate").html());
             $('.content').html(template(data.root));
         });
@@ -24,12 +37,13 @@
     <div class="content"></div>
     <script id="componentTemplate" type="text/x-handlebars-template">
         {{#if category}}
-            <h3>{{category}}</h3>
+            <div class="details">{{category}}</div>
+            <div class="details">{{stringify this}}</div>
             <ul>
             {{#each interpretations}}
-                <li>
+                <li class="interpretation">
                 {{#each this}}
-                    {{> component}}
+                    <span class="component">{{> component}}</span>
                 {{/each}}
                 </li>
             {{/each}}

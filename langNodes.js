@@ -17,7 +17,8 @@ exports.simpleTestNodes = [{
     components: ['test']
 }, {
     category: 'main',
-    components: ['test']
+    components: ['add'],
+    url: "/addLangNode.html"
 }, {
     category: 'main',
     components: ['canMix?(', {'category' : 'software licenses'}, ',', {'category' : 'software licenses'}, ')']

@@ -176,18 +176,23 @@ app.get('/category/:category', function(req, res){
                      });
                 }
             }
-         });
+        });
     } else {
         renderedTemplate = zcache.indexTemplate({'category' : category});
         res.send(renderedTemplate);
     }
 });
-// Handler for GET /
 app.get('/', function(req, res){
     var renderedTemplate;
     var category = 'main';
     renderedTemplate = zcache.indexTemplate({'category' : category});
     res.send(renderedTemplate);
+});
+app.get('/upvote', function(req, res){
+    res.send("Not yet implemented");
+});
+app.get('/downvote', function(req, res){
+    res.send("Not yet implemented");
 });
 
 function fetchRepo(repository, callback) {
