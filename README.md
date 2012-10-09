@@ -44,9 +44,9 @@ Language Terminology for computer scientists:
 Server API:
 ---------------
 
-Add language node
+upsert language node
 
-Get parse
+get parse tree
 
 
 Parse Tree Structure:
