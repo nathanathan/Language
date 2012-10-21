@@ -15,7 +15,11 @@ var db;
 //For connecting to github api:
 var https = require('https');
 var pipette = require('pipette');
-
+/*
+I'm considering using node-github for this purpose instead.
+However, it might be nice to make the gh api code node.js independent so it can be used in browser widgets as well.
+var GitHubApi = require("github");
+*/
 var config = require('./config');
 var langNodes = require('./langNodes');
 var EarleyParser = require('./earley');
@@ -28,14 +32,21 @@ zcache.parseChartTemplate = Handlebars.compile(fs.readFileSync('templates/parseC
 zcache.defaultWidget = fs.readFileSync('defaultWidget.html', 'utf8');
 
 // Create "express" server.
+//TODO: Upgrade on OpenShift
 var app  = express.createServer();
 
 app.configure(function(){
-	//app.use(express.errorHandler({ dumpExceptions: true, showStack: true }));
-	app.use(express.bodyParser());//This must come before router
+    //TODO: I'll probably need to use a storage provider for sessions.
+    //sessions stuff should come first.
+    app.use(express.cookieParser()),
+    app.use(express.session({ secret: "keyboard cat" }));
+    //This must come before router
+	app.use(express.bodyParser());
 	app.use(app.router);
 	//app.use(express.static('./ace-builds'));
     app.use(express.static('./static'));
+    //error handling should come last
+    app.use(express.errorHandler({showStack: true, dumpExceptions: true}));
 });
 
 /*  =====================================================================  */
@@ -183,6 +194,18 @@ app.get('/category/:category', function(req, res){
 app.get('/', function(req, res){
     var renderedTemplate;
     var category = 'main';
+    
+    /*
+    http://www.garann.com/dev/2011/calling-the-github-api-with-node-js/
+    console.log(req.session);
+    if(!req.session.blah){
+        req.session.blah = 1;
+    }
+    req.session.destroy(function(err){
+        if(err) throw err;
+    });
+    */
+    
     renderedTemplate = zcache.indexTemplate({'category' : category});
     res.send(renderedTemplate);
 });
@@ -255,16 +278,20 @@ app.get('/langNode/:id', function(req, res) {
         fetchRepo(langNode.repository, function(err, repositoryData) {
             var content, lastGistCommitDate, lastSyncDate;
             if (err) {
-                res.send('Error: ' + err);
-                return;
+                throw err;
             }
             lastGistCommitDate = new Date(repositoryData.history[0].committed_at);
             lastSyncDate = langNode.lastSync ? new Date(langNode.lastSync) : new Date(0);
             if (lastGistCommitDate > lastSyncDate) {
-                try{
-                    content = JSON.parse(repositoryData.files['languageNode.json'].content);
-                } catch(err) {
-                    res.send('Error: ' + err);
+                if('languageNode.json' in repositoryData.files) {
+                    try{
+                        content = JSON.parse(repositoryData.files['languageNode.json'].content);
+                    } catch(err) {
+                        res.send('Cound not parse languageNode.json.\nError: ' + err);
+                        return;
+                    }
+                } else {
+                    res.send('Error: Repository does not have languageNode.json file.');
                     return;
                 }
                 //content.files = repositoryData.files;
@@ -273,8 +300,7 @@ app.get('/langNode/:id', function(req, res) {
                     _id: langNode._id
                 }, content, function(err, syncedNode) {
                     if (err) {
-                        res.send('Error: ' + err);
-                        return;
+                        throw err;
                     }
                     //Files are kept separately so langNode docs are smaller.
                     //Eventually, I would like to use ghpages
@@ -380,7 +406,7 @@ process.on('exit', function() { terminator(); });
 
 //Question: What is the ideal place to connect to the db
 app.listen(port, ipaddr, function() { 
-    var reinit = true;
+    var reinit = false;
     db = mongo.db(config.databaseUrl);
     db.createCollection('files', function(err, collection) {});
     db.createCollection('interpretations', function(err, collection) {});
@@ -388,16 +414,8 @@ app.listen(port, ipaddr, function() {
     db.createCollection('langNodes', function(err, collection) {
         if(reinit){
             db.collection('langNodes').remove(function() {
-                /*
-                var testNodes = [
-                _.extend(Object.create(langNodes.testNodes), {
-                    hi: 'hi'
-                })
-                //Object.create(langNodes.baseNode)
-                ];
-                */
-        
-                db.collection('langNodes').insert(langNodes.simpleTestNodes, {
+
+                db.collection('langNodes').insert(langNodes.testNodes, {
                     upsert: true,
                     safe: true
                 },
