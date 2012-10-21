@@ -56,18 +56,14 @@ iframe.content{
 .optionsToggleBtn{
 	float: right;
 }
-.votebtn{
-	color: gray;
-}
-.votebtn:hover {
-    color: pink;
-}
-.action {
+.interpretation-menu a {
     color: gray;
     cursor: pointer;
 }
-.action:hover {
+.interpretation-menu a:hover {
     color: pink;
+}
+.interpretation-menu a:visited {
 }
 .headerLink {
     text-decoration: none;

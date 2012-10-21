@@ -29,6 +29,7 @@ var zcache = {};
 zcache.indexTemplate = Handlebars.compile(fs.readFileSync('templates/index.html', 'utf8'));
 zcache.resultsTemplate = Handlebars.compile(fs.readFileSync('templates/results.html', 'utf8'));
 zcache.parseChartTemplate = Handlebars.compile(fs.readFileSync('templates/parseChart.html', 'utf8'));
+zcache.nodeInfoTemplate = Handlebars.compile(fs.readFileSync('templates/langNode.html', 'utf8'));
 zcache.defaultWidget = fs.readFileSync('defaultWidget.html', 'utf8');
 
 // Create "express" server.
@@ -267,6 +268,7 @@ function syncNode(query, content, callback) {
 app.get('/langNode/:id', function(req, res) {
     var id = req.params.id;
     db.collection('langNodes').findById(id, function(err, langNode) {
+        var renderedTemplate;
         if (err) {
             res.send('Error: ' + err);
             return;
@@ -313,12 +315,20 @@ app.get('/langNode/:id', function(req, res) {
                         upsert: true,
                         safe: true
                     }, function() {});
-                    
-                    res.send('SYNCED:' + JSON.stringify(syncedNode));
+                    renderedTemplate = zcache.nodeInfoTemplate({
+                        syncedNode: syncedNode,
+                        repositoryData: repositoryData,
+                        previousSyncDate: lastSyncDate
+                    });
+                    res.send(renderedTemplate);
                 });
             }
             else {
-                res.send('Repository already synced.');
+                renderedTemplate = zcache.nodeInfoTemplate({
+                    repositoryData: repositoryData,
+                    previousSyncDate: lastSyncDate
+                });
+                res.send(renderedTemplate);
             }
         });
     });
