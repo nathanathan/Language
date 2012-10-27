@@ -4,13 +4,13 @@ var _ = require('underscore')._;
 var EventEmitter = require( "events" ).EventEmitter;
 function isIncomplete(langNode) {
     console.log('isIncomplete');
-    return (langNode.parseData.atComponent < langNode.content.components.length);
+    return (langNode.parseData.atComponent < langNode.components.length);
 }
 function replaceStringsWithTerminalObjects(langNode) {
     //Strings syntactic sugar to make it easier to langNode creators to define terminals.
     //Object terminals are needed so meta data can be attached to them.
-    if (langNode.content.components) {
-        langNode.content.components = _.map(langNode.content.components, function(component) {
+    if (langNode.components) {
+        langNode.components = _.map(langNode.components, function(component) {
             if (_.isString(component)) {
                 return {
                     terminal: component
@@ -59,12 +59,12 @@ module.exports = {
                 });
             } else if('category' in component) {
                 langNodeInterps = _.filter(chart[colIdx], function(langNode) {
-                    return (langNode.content.category === component.category) && langNode.parseData.complete;
+                    return (langNode.category === component.category) && langNode.parseData.complete;
                 });
                 if(langNodeInterps.length === 0 ) return [[]];
                 return _.flatten(_.map(langNodeInterps, function(langNodeInterp) {
                     var returnInterp = _.extend({}, langNodeInterp);//TODO: Probably not necessairy.
-                    returnInterp.interpretations = processComponents(returnInterp.content.components, colIdx);
+                    returnInterp.interpretations = processComponents(returnInterp.components, colIdx);
                     return _.map(processComponents(components.slice(0, -1), langNodeInterp.parseData.origin), function(interpretation){
                         //TODO: remove parseData here?
                         return interpretation.concat(returnInterp);
@@ -110,7 +110,7 @@ module.exports = {
         }
         //This is async.
         function predictor(langNode, j) {
-            var currentComponent = langNode.content.components[langNode.parseData.atComponent];
+            var currentComponent = langNode.components[langNode.parseData.atComponent];
             //console.log("predictor: category: " + currentComponent.category);
             //I want to know why mongo uses json paths to query nested json objects rather than nested json objects.
             //I suppose it's easier to write queries by hand, but it's so much cleaner when you generate queries in code.
@@ -140,7 +140,7 @@ module.exports = {
         function terminalScanner(langNode, j) {
             console.log("terminalScanner");
             console.log(langNode);
-            var componentString = langNode.content.components[langNode.parseData.atComponent].terminal;
+            var componentString = langNode.components[langNode.parseData.atComponent].terminal;
             if(input[j] === componentString[langNode.parseData.stringIdx]) {
                 langNode = Object.create(langNode);
                 langNode.parseData = _.clone(langNode.parseData);
@@ -148,7 +148,7 @@ module.exports = {
                 if(langNode.parseData.stringIdx >= componentString.length) {
                     langNode.parseData.atComponent++;
                     langNode.parseData.stringIdx = 0;
-                    if(langNode.parseData.atComponent >= langNode.content.components.length) {
+                    if(langNode.parseData.atComponent >= langNode.components.length) {
                         langNode.parseData.complete = true;
                     }
                 }
@@ -160,7 +160,7 @@ module.exports = {
             console.log("regexScanner");
             console.log(langNode);
             var alwaysEmittedNode, matchEmittedNode;
-            var regex = langNode.content.components[langNode.parseData.atComponent].regex;
+            var regex = langNode.components[langNode.parseData.atComponent].regex;
             if(j < input.length) {//TODO: Use incremental regexs here to rule out input that can't possibly match.
                 alwaysEmittedNode = Object.create(langNode);
                 alwaysEmittedNode.parseData = _.clone(langNode.parseData);//Can I use Object.create here? Iff parseData is static?
@@ -172,7 +172,7 @@ module.exports = {
                 if(regex.test(input.slice(j + 1 - matchEmittedNode.parseData.stringIdx, j+1))) {
                     matchEmittedNode.parseData.atComponent++;
                     matchEmittedNode.parseData.stringIdx = 0;
-                    if(matchEmittedNode.parseData.atComponent >= matchEmittedNode.content.components.length) {
+                    if(matchEmittedNode.parseData.atComponent >= matchEmittedNode.components.length) {
                         matchEmittedNode.parseData.complete = true;
                     }
                     statePools[j+1].emit('add', matchEmittedNode);
@@ -185,14 +185,14 @@ module.exports = {
             console.log("completer");
             //TODO: This is probably a bug, the chart might not be fully filled out.
             _.each(chart[langNode.parseData.origin], function(originLN, idx) {
-                var originComponent = originLN.content.components[originLN.parseData.atComponent];
+                var originComponent = originLN.components[originLN.parseData.atComponent];
                 //This assumes we are completing non-terminals.
-                if(originComponent.category === langNode.content.category) {
+                if(originComponent.category === langNode.category) {
                     //Make a new state from the origin state
                     originLN = Object.create(originLN);
                     originLN.parseData = _.clone(originLN.parseData);
                     originLN.parseData.atComponent++;
-                    if(originLN.parseData.atComponent >= originLN.content.components.length) {
+                    if(originLN.parseData.atComponent >= originLN.components.length) {
                         originLN.parseData.complete = true;
                     }
                     statePools[j].emit('add', originLN);
@@ -237,8 +237,8 @@ module.exports = {
                 if(_.any(chart[idx], function(item){
                         if(langNode.parseData.atComponent === item.parseData.atComponent){
                             if(langNode.parseData.stringIdx === item.parseData.stringIdx){
-                                if(langNode.content.category === item.content.category){
-                                    return _.isEqual(langNode.content.components, item.content.components);
+                                if(langNode.category === item.category){
+                                    return _.isEqual(langNode.components, item.components);
                                 }
                             }
                         }
@@ -250,7 +250,7 @@ module.exports = {
                 counter++;
                 chart[idx].push(langNode);
                 if(!langNode.parseData.complete) {
-                    currentComponent = langNode.content.components[langNode.parseData.atComponent];
+                    currentComponent = langNode.components[langNode.parseData.atComponent];
                     if('terminal' in currentComponent){
                         terminalScanner(langNode, idx);
                     } else if('category' in currentComponent) { //categories are non-terminals
@@ -268,10 +268,8 @@ module.exports = {
         });
         //TODO: Try feeding this into predictor instead so GAMMA doesn't show up in the output.
         statePools[0].emit('add', {
-            'content': {
-                'category' : 'GAMMA',
-                'components' : [{'category' : startCategory}]
-            },
+            'category' : 'GAMMA',
+            'components' : [{'category' : startCategory}],
             'parseData': {
                 'atComponent' : 0,
                 'stringIdx' : 0,
