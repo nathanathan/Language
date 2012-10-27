@@ -6,6 +6,23 @@ function isIncomplete(langNode) {
     console.log('isIncomplete');
     return (langNode.parseData.atComponent < langNode.content.components.length);
 }
+function replaceStringsWithTerminalObjects(langNode) {
+    //Strings syntactic sugar to make it easier to langNode creators to define terminals.
+    //Object terminals are needed so meta data can be attached to them.
+    if (langNode.content.components) {
+        langNode.content.components = _.map(langNode.content.components, function(component) {
+            if (_.isString(component)) {
+                return {
+                    terminal: component
+                };
+            }
+            else if (_.isObject(component)) {
+                replaceStringsWithTerminalObjects(component);
+                return component;
+            }
+        });
+    }
+}
 //Thanks to Luke Z. for suggesting the Earley parser to me.
 //The thing that makes it great for this purpose is that it doesn't have to look at all the non-terminals in the grammar,
 //but it still has reasonable time complexity in the size of the input string.
@@ -36,31 +53,27 @@ module.exports = {
                 return [[]];
             }
             component = components.slice(-1)[0];
-            if(_.isString(component)) {
-                return _.map(processComponents(components.slice(0, -1), colIdx - component.length), function(interpretation){
+            if('terminal' in component) {
+                return _.map(processComponents(components.slice(0, -1), colIdx - component.terminal.length), function(interpretation){
                     return interpretation.concat(component);
                 });
-            } else if(_.isObject(component)) {
-                if('category' in component) {
-                    langNodeInterps = _.filter(chart[colIdx], function(langNode) {
-                        return (langNode.content.category === component.category) && langNode.parseData.complete;
+            } else if('category' in component) {
+                langNodeInterps = _.filter(chart[colIdx], function(langNode) {
+                    return (langNode.content.category === component.category) && langNode.parseData.complete;
+                });
+                if(langNodeInterps.length === 0 ) return [[]];
+                return _.flatten(_.map(langNodeInterps, function(langNodeInterp) {
+                    var returnInterp = _.extend({}, langNodeInterp);//TODO: Probably not necessairy.
+                    returnInterp.interpretations = processComponents(returnInterp.content.components, colIdx);
+                    return _.map(processComponents(components.slice(0, -1), langNodeInterp.parseData.origin), function(interpretation){
+                        //TODO: remove parseData here?
+                        return interpretation.concat(returnInterp);
                     });
-                    if(langNodeInterps.length === 0 ) return [[]];
-                    return _.flatten(_.map(langNodeInterps, function(langNodeInterp) {
-                        var returnInterp = _.extend({}, langNodeInterp);//TODO: Probably not necessairy.
-                        returnInterp.interpretations = processComponents(returnInterp.content.components, colIdx);
-                        return _.map(processComponents(components.slice(0, -1), langNodeInterp.parseData.origin), function(interpretation){
-                            //TODO: remove parseData here?
-                            return interpretation.concat(returnInterp);
-                        });
-                    }), true);
-                } else if('regex' in component) {
-                    //TODO
-                } else {
-                    throw "Unknown component type:\n" + JSON.stringify(component);
-                }
+                }), true);
+            } else if('regex' in component) {
+                //TODO
             } else {
-                throw "Unknown component type:\n" + component;
+                throw "Unknown component type:\n" + JSON.stringify(component);
             }
         }
         var interpretationsTree = processComponents([{category : 'GAMMA'}], chart.length - 1)[0][0];
@@ -105,6 +118,7 @@ module.exports = {
             collection.find({ 'content.category' : currentComponent.category }).toArray(function(err, array) {
                 if (err) throw err;//TODO: Missing categories might be an issue, but perhaps this is only for db errors.
                 _.each(array, function(cLangNode){
+                    //TODO: Perhaps more stringIdx into terminals and do something similar with regexs
                     cLangNode.parseData = {
                         'atComponent' : 0,
                         'stringIdx' : 0,
@@ -116,22 +130,22 @@ module.exports = {
                     //not that I have support for this yet.
                     cLangNode.category = cLangNode.content.category;
                     cLangNode.components = cLangNode.content.components;
-
+                    replaceStringsWithTerminalObjects(cLangNode);
                     statePools[j].emit('add', cLangNode);
                 });
                 //I'm assuming that emited events happen in order or emission.
                 statePools[j].emit('done');
             });
         }
-        function scanner(langNode, j) {
-            console.log("scanner");
+        function terminalScanner(langNode, j) {
+            console.log("terminalScanner");
             console.log(langNode);
-            var component = langNode.content.components[langNode.parseData.atComponent];
-            if(input[j] === component[langNode.parseData.stringIdx]) {
+            var componentString = langNode.content.components[langNode.parseData.atComponent].terminal;
+            if(input[j] === componentString[langNode.parseData.stringIdx]) {
                 langNode = Object.create(langNode);
                 langNode.parseData = _.clone(langNode.parseData);
                 langNode.parseData.stringIdx++;
-                if(langNode.parseData.stringIdx >= component.length) {
+                if(langNode.parseData.stringIdx >= componentString.length) {
                     langNode.parseData.atComponent++;
                     langNode.parseData.stringIdx = 0;
                     if(langNode.parseData.atComponent >= langNode.content.components.length) {
@@ -139,6 +153,30 @@ module.exports = {
                     }
                 }
                 statePools[j+1].emit('add', langNode);
+            }
+            statePools[j].emit('done');
+        }
+        function regexScanner(langNode, j) {
+            console.log("regexScanner");
+            console.log(langNode);
+            var alwaysEmittedNode, matchEmittedNode;
+            var regex = langNode.content.components[langNode.parseData.atComponent].regex;
+            if(j < input.length) {//TODO: Use incremental regexs here to rule out input that can't possibly match.
+                alwaysEmittedNode = Object.create(langNode);
+                alwaysEmittedNode.parseData = _.clone(langNode.parseData);//Can I use Object.create here? Iff parseData is static?
+                alwaysEmittedNode.parseData.stringIdx++;
+                statePools[j+1].emit('add', alwaysEmittedNode);
+                matchEmittedNode = Object.create(langNode);
+                matchEmittedNode.parseData = _.clone(langNode.parseData);//Can I use Object.create here?
+                matchEmittedNode.parseData.stringIdx++;
+                if(regex.test(input.slice(j + 1 - matchEmittedNode.parseData.stringIdx, j+1))) {
+                    matchEmittedNode.parseData.atComponent++;
+                    matchEmittedNode.parseData.stringIdx = 0;
+                    if(matchEmittedNode.parseData.atComponent >= matchEmittedNode.content.components.length) {
+                        matchEmittedNode.parseData.complete = true;
+                    }
+                    statePools[j+1].emit('add', matchEmittedNode);
+                }
             }
             statePools[j].emit('done');
         }
@@ -213,16 +251,14 @@ module.exports = {
                 chart[idx].push(langNode);
                 if(!langNode.parseData.complete) {
                     currentComponent = langNode.content.components[langNode.parseData.atComponent];
-                    if(_.isString(currentComponent)) { //strings are teminals.
-                         scanner(langNode, idx);
-                    } else if(_.isObject(currentComponent)) {
-                        if('category' in currentComponent) { //categories are non-terminals
-                            predictor(langNode, idx);
-                        } else if('regex' in currentComponent) {
-                            //TODO
-                        } else {
-                            throw "Unknown component type:\n" + JSON.stringify(currentComponent);
-                        }
+                    if('terminal' in currentComponent){
+                        terminalScanner(langNode, idx);
+                    } else if('category' in currentComponent) { //categories are non-terminals
+                        predictor(langNode, idx);
+                    } else if('regex' in currentComponent) {
+                        regexScanner(langNode, idx);
+                    } else {
+                        throw "Unknown component type:\n" + JSON.stringify(currentComponent);
                     }
                 } else {
                     completer(langNode, idx);
