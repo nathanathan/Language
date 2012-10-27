@@ -23,6 +23,22 @@ function replaceStringsWithTerminalObjects(langNode) {
         });
     }
 }
+function initializeRegexs(langNode) {
+    //Strings syntactic sugar to make it easier to langNode creators to define terminals.
+    //Object terminals are needed so meta data can be attached to them.
+    if (langNode.components) {
+        langNode.components = _.map(langNode.components, function(component) {
+            if (_.isObject(component)) {
+                if('regex' in component){
+                    component.compiledRegExp = new RegExp(component.regex);
+                } else {
+                    initializeRegexs(component);
+                }
+                return component;
+            }
+        });
+    }
+}
 //Thanks to Luke Z. for suggesting the Earley parser to me.
 //The thing that makes it great for this purpose is that it doesn't have to look at all the non-terminals in the grammar,
 //but it still has reasonable time complexity in the size of the input string.
@@ -57,6 +73,10 @@ module.exports = {
                 return _.map(processComponents(components.slice(0, -1), colIdx - component.terminal.length), function(interpretation){
                     return interpretation.concat(component);
                 });
+            } else if('regex' in component) {
+                return _.map(processComponents(components.slice(0, -1), colIdx - component.match.length), function(interpretation){
+                    return interpretation.concat(component);
+                });
             } else if('category' in component) {
                 langNodeInterps = _.filter(chart[colIdx], function(langNode) {
                     return (langNode.category === component.category) && langNode.parseData.complete;
@@ -70,8 +90,6 @@ module.exports = {
                         return interpretation.concat(returnInterp);
                     });
                 }), true);
-            } else if('regex' in component) {
-                //TODO
             } else {
                 throw "Unknown component type:\n" + JSON.stringify(component);
             }
@@ -131,6 +149,7 @@ module.exports = {
                     cLangNode.category = cLangNode.content.category;
                     cLangNode.components = cLangNode.content.components;
                     replaceStringsWithTerminalObjects(cLangNode);
+                    initializeRegexs(cLangNode);
                     statePools[j].emit('add', cLangNode);
                 });
                 //I'm assuming that emited events happen in order or emission.
@@ -159,24 +178,31 @@ module.exports = {
         function regexScanner(langNode, j) {
             console.log("regexScanner");
             console.log(langNode);
-            var alwaysEmittedNode, matchEmittedNode;
-            var regex = langNode.components[langNode.parseData.atComponent].regex;
+            var alwaysEmittedNode, matchEmittedNode, inputSlice, modifiedComponent;
+            var component = langNode.components[langNode.parseData.atComponent];
             if(j < input.length) {//TODO: Use incremental regexs here to rule out input that can't possibly match.
                 alwaysEmittedNode = Object.create(langNode);
                 alwaysEmittedNode.parseData = _.clone(langNode.parseData);//Can I use Object.create here? Iff parseData is static?
                 alwaysEmittedNode.parseData.stringIdx++;
                 statePools[j+1].emit('add', alwaysEmittedNode);
+            }
+
+            inputSlice = input.slice(j - langNode.parseData.stringIdx, j);
+            if(component.compiledRegExp.test(inputSlice)) {
                 matchEmittedNode = Object.create(langNode);
                 matchEmittedNode.parseData = _.clone(langNode.parseData);//Can I use Object.create here?
+                //shallow copy component array:
+                matchEmittedNode.components = _.map(matchEmittedNode.components, function(x){return x;});
+                modifiedComponent = _.clone(component);//TODO: modify chart rendering so I can use Object.create here?
+                modifiedComponent.match = inputSlice;
+                matchEmittedNode.components[matchEmittedNode.parseData.atComponent] = modifiedComponent;
                 matchEmittedNode.parseData.stringIdx++;
-                if(regex.test(input.slice(j + 1 - matchEmittedNode.parseData.stringIdx, j+1))) {
-                    matchEmittedNode.parseData.atComponent++;
-                    matchEmittedNode.parseData.stringIdx = 0;
-                    if(matchEmittedNode.parseData.atComponent >= matchEmittedNode.components.length) {
-                        matchEmittedNode.parseData.complete = true;
-                    }
-                    statePools[j+1].emit('add', matchEmittedNode);
+                matchEmittedNode.parseData.atComponent++;
+                matchEmittedNode.parseData.stringIdx = 0;
+                if(matchEmittedNode.parseData.atComponent >= matchEmittedNode.components.length) {
+                    matchEmittedNode.parseData.complete = true;
                 }
+                statePools[j].emit('add', matchEmittedNode);
             }
             statePools[j].emit('done');
         }
