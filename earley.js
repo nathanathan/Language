@@ -2,10 +2,7 @@
 var assert = require('assert');
 var _ = require('underscore')._;
 var EventEmitter = require( "events" ).EventEmitter;
-function isIncomplete(langNode) {
-    console.log('isIncomplete');
-    return (langNode.parseData.atComponent < langNode.components.length);
-}
+
 function replaceStringsWithTerminalObjects(langNode) {
     //Strings syntactic sugar to make it easier to langNode creators to define terminals.
     //Object terminals are needed so meta data can be attached to them.
@@ -30,7 +27,7 @@ function initializeRegexs(langNode) {
         langNode.components = _.map(langNode.components, function(component) {
             if (_.isObject(component)) {
                 if('regex' in component){
-                    component.compiledRegExp = new RegExp(component.regex);
+                    component.compiledRegExp = new RegExp('^' + component.regex + '$');
                 } else {
                     initializeRegexs(component);
                 }
@@ -79,11 +76,12 @@ module.exports = {
                 });
             } else if('category' in component) {
                 langNodeInterps = _.filter(chart[colIdx], function(langNode) {
-                    return (langNode.category === component.category) && langNode.parseData.complete;
+                    return (langNode.category === component.category) && (langNode.parseData.atComponent >= langNode.components.length);
                 });
                 if(langNodeInterps.length === 0 ) return [[]];
                 return _.flatten(_.map(langNodeInterps, function(langNodeInterp) {
-                    var returnInterp = _.extend({}, langNodeInterp);//TODO: Probably not necessairy.
+                    //Might be causing stack overflow.
+                    var returnInterp = langNodeInterp;//_.extend({}, langNodeInterp);//TODO: Probably not necessairy.
                     returnInterp.interpretations = processComponents(returnInterp.components, colIdx);
                     return _.map(processComponents(components.slice(0, -1), langNodeInterp.parseData.origin), function(interpretation){
                         //TODO: remove parseData here?
@@ -167,9 +165,6 @@ module.exports = {
                 if(langNode.parseData.stringIdx >= componentString.length) {
                     langNode.parseData.atComponent++;
                     langNode.parseData.stringIdx = 0;
-                    if(langNode.parseData.atComponent >= langNode.components.length) {
-                        langNode.parseData.complete = true;
-                    }
                 }
                 statePools[j+1].emit('add', langNode);
             }
@@ -199,9 +194,6 @@ module.exports = {
                 matchEmittedNode.parseData.stringIdx++;
                 matchEmittedNode.parseData.atComponent++;
                 matchEmittedNode.parseData.stringIdx = 0;
-                if(matchEmittedNode.parseData.atComponent >= matchEmittedNode.components.length) {
-                    matchEmittedNode.parseData.complete = true;
-                }
                 statePools[j].emit('add', matchEmittedNode);
             }
             statePools[j].emit('done');
@@ -213,15 +205,25 @@ module.exports = {
             _.each(chart[langNode.parseData.origin], function(originLN, idx) {
                 var originComponent = originLN.components[originLN.parseData.atComponent];
                 //This assumes we are completing non-terminals.
-                if(originComponent.category === langNode.category) {
-                    //Make a new state from the origin state
-                    originLN = Object.create(originLN);
-                    originLN.parseData = _.clone(originLN.parseData);
-                    originLN.parseData.atComponent++;
-                    if(originLN.parseData.atComponent >= originLN.components.length) {
-                        originLN.parseData.complete = true;
+                if(originLN.parseData.atComponent < originLN.components.length) {
+                    //TODO: Think about this more.
+                    //if( originComponent === langNode || originComponent.isPrototypeOf(langNode)) {
+                    if( originComponent.category === langNode.category ) {
+                        //Make a new state from the origin state
+                        originLN = Object.create(originLN);
+                        /*
+                        if(originLN.interpretations){
+                            //Shallow copy the interpretations
+                            originLN.interpretations = originLN.interpretations.map(function(x){ return x; });
+                        } else {
+                            originLN.interpretations
+                        }*/
+                        originLN.components[originLN.parseData.atComponent] = langNode;
+                        
+                        originLN.parseData = _.clone(originLN.parseData);
+                        originLN.parseData.atComponent++;
+                        statePools[j].emit('add', originLN);
                     }
-                    statePools[j].emit('add', originLN);
                 }
             });
             statePools[j].emit('done');
@@ -260,22 +262,26 @@ module.exports = {
                 var currentComponent;
                 //Make sure the item is unique.
                 //TODO: Make unit tested function for node comparison.
-                if(_.any(chart[idx], function(item){
-                        if(langNode.parseData.atComponent === item.parseData.atComponent){
-                            if(langNode.parseData.stringIdx === item.parseData.stringIdx){
-                                if(langNode.category === item.category){
-                                    return _.isEqual(langNode.components, item.components);
-                                }
+                //TODO: I'm not sure what this does with regexs
+                var duplicate = _.find(chart[idx], function(item){
+                    if(langNode.parseData.atComponent === item.parseData.atComponent){
+                        if(langNode.parseData.stringIdx === item.parseData.stringIdx){
+                            if(langNode.category === item.category){
+                                return _.isEqual(langNode.components, item.components);
                             }
                         }
-                        return false;
-                    })) {
-                    console.log("duplicate found");
+                    }
+                    return false;
+                });
+                if(duplicate) {
+                    console.log("duplicate found.");
+                    //langNode.interpretations.concat(duplicate.interpretations);
                     return;
                 }
                 counter++;
                 chart[idx].push(langNode);
-                if(!langNode.parseData.complete) {
+                
+                if(langNode.parseData.atComponent < langNode.components.length) {
                     currentComponent = langNode.components[langNode.parseData.atComponent];
                     if('terminal' in currentComponent){
                         terminalScanner(langNode, idx);

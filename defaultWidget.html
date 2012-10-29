@@ -29,6 +29,10 @@
             var template = Handlebars.compile($("#componentTemplate").html());
             Handlebars.registerPartial("component", $("#componentTemplate").html());
             $('.content').html(template(data.root));
+            $('.detailsBtn').click(function(){
+                $(this).siblings().toggle();
+            });
+            $('.detailsBtn').siblings().toggle();
         });
     });
     </script>
@@ -38,7 +42,7 @@
     <script id="componentTemplate" type="text/x-handlebars-template">
         {{#if category}}
             <div class="category">{{category}}</div>
-            <div class="details">{{stringify this}}</div>
+            <div class="details"><button class="detailsBtn">details</button><pre>{{stringify this}}</pre></div>
             <ul>
             {{#each interpretations}}
                 <li class="interpretation">
@@ -49,7 +53,17 @@
             {{/each}}
             </ul>
         {{else}}
-            {{this}}
+            {{#if terminal}}
+                <p>Terminal: {{terminal}}</p>
+            {{else}}
+                {{#if regex}}
+                    <p>RegExp: {{regex}}</p>
+                    <p>Match: {{match}}</p>
+                {{else}}
+                    <h3>Unknown type</h3>
+                    {{stringify this}}
+                {{/if}}
+            {{/if}}
         {{/if}}
     </script>
 </body>

@@ -59,26 +59,35 @@ app.get('/health', function(req, res){
     res.send('1');
 });
 
-app.get('/dbg', function(req, res) {
+app.get('/dbg', function(req, res, next) {
     db.collection('langNodes').find().toArray(function(err, items){
-        if(err) throw err;
+        if(err) {
+            next(err);
+            return;
+        }
         res.writeHead(200, {'Content-Type': 'text/plain'});
         res.end(JSON.stringify(items));
     });
     return;
 });
-app.get('/dbgf', function(req, res) {
+app.get('/dbgf', function(req, res, next) {
     db.collection('files').find().toArray(function(err, items){
-        if(err) throw err;
+        if(err) {
+            next(err);
+            return;
+        }
         res.writeHead(200, {'Content-Type': 'text/plain'});
         res.end(JSON.stringify(items));
     });
     return;
 });
 
-app.get('/interpretations/:id', function(req, res) {
+app.get('/interpretations/:id', function(req, res, next) {
     db.collection('interpretations').findById(req.params.id, function(err, interpretation){
-        if(err) throw err;
+        if(err) {
+            next(err);
+            return;
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(interpretation)); 
     });
@@ -93,9 +102,12 @@ app.get('/interpretations/:id', function(req, res) {
  * -Gists can't be hosted on gh-pages, and I want them to be very easy to use.
  * -There could be some origin issues.
  **/
-app.get('/pages/:id', function(req, res) {
+app.get('/pages/:id', function(req, res, next) {
     db.collection('files').findById(req.params.id, function(err, langNodeFiles){
-        if(err) throw err;
+        if(err) {
+            next(err);
+            return;
+        }
         if(langNodeFiles && langNodeFiles.files && langNodeFiles.files['index.html']) {
             //res.writeHead(200, {'Content-Type': 'text/plain'});
             //TODO: Generalize this so we can serve the full gist.
@@ -113,7 +125,7 @@ function renderChart(input, chart){
             return _.map(col, function(langNode){
                 return _.extend(langNode, {
                     colspan: colIdx - langNode.parseData.origin,
-                    complete: langNode.parseData.complete,
+                    complete: langNode.parseData.atComponent >= langNode.components.length,
                     origin: langNode.parseData.origin
                 });
             });
@@ -122,7 +134,7 @@ function renderChart(input, chart){
     });
 }
 
-app.get('/category/:category', function(req, res){
+app.get('/category/:category', function(req, res, next){
     //TODO: Check that the category exists.
     var renderedTemplate;
     var category = req.params.category;
@@ -136,55 +148,66 @@ app.get('/category/:category', function(req, res){
         }, 
         { safe: true }, 
         function(err, result){
-            if(err){
-                //If this happens there are problems I haven't thought about.
-                res.send(String(err));
+            if(err) {
+                next(err);
                 return;
             }
         });
         EarleyParser.parse(req.query.q, category, db.collection('langNodes'), function(err, chart){
             if(err){
-                res.send(String(err));
+                next(err);
                 return;
             }
-            if('chart' in req.query){
-                res.send(renderChart(req.query.q, chart));
-            } else if( 'json' in req.query) {
-                res.send('<pre>'+JSON.stringify(EarleyParser.chartToInterpretations(chart), 2, 4)+'</pre>');
-            } else {
-                var interpretations;
-                interpretations = EarleyParser.chartToInterpretations(chart);
-                interpretations = _.map(interpretations, function(interpretation){
-                    return {
-                        '_id': new mongo.ObjectID(),
-                        'root': interpretation,
-                        'queryId': queryId
-                    };
-                });
-                _.defer(function(){
-                    //This is deferred so it can happen whiles the interpretations are inserted.
-                    renderedTemplate = zcache.resultsTemplate({
-                        'interpretations': interpretations,
-                        'query': req.query.q,
-                        'category': category
-                    });
-                });
-                if(interpretations.length > 0){
-                    db.collection('interpretations').insert(interpretations, {
-                        safe: true
-                    }, function(err, result) {
-                        if(err){
-                            res.send(String(err));
-                            return;
+            try{
+                if('chart' in req.query){
+                    res.send(renderChart(req.query.q, chart));
+                } else if( 'json' in req.query) {
+                    function deprototype(obby){
+                        if(_.isObject(obby)) {
+                            _.extend(obby, _.extend({}, obby));
+                            _.each(_.values(obby), deprototype);
                         }
-                        res.send(renderedTemplate);
-                    });
+                        return obby;
+                    }
+                    res.send('<pre>'+JSON.stringify(deprototype(_.find(chart[chart.length - 1], function(x){return x.category === "GAMMA";})), 2, 4)+'</pre>');
+                   // res.send('<pre>'+JSON.stringify(EarleyParser.chartToInterpretations(chart), 2, 4)+'</pre>');
                 } else {
-                     _.defer(function(){
-                         //This is deferred so it happens after the template is rendered.
-                         res.send(renderedTemplate);
-                     });
+                    var interpretations;
+                    interpretations = EarleyParser.chartToInterpretations(chart);
+                    interpretations = _.map(interpretations, function(interpretation){
+                        return {
+                            '_id': new mongo.ObjectID(),
+                            'root': interpretation,
+                            'queryId': queryId
+                        };
+                    });
+                    _.defer(function(){
+                        //This is deferred so it can happen whiles the interpretations are inserted.
+                        renderedTemplate = zcache.resultsTemplate({
+                            'interpretations': interpretations,
+                            'query': req.query.q,
+                            'category': category
+                        });
+                    });
+                    if(interpretations.length > 0){
+                        db.collection('interpretations').insert(interpretations, {
+                            safe: true
+                        }, function(err, result) {
+                            if(err) {
+                                next(err);
+                                return;
+                            }
+                            res.send(renderedTemplate);
+                        });
+                    } else {
+                         _.defer(function(){
+                             //This is deferred so it happens after the template is rendered.
+                             res.send(renderedTemplate);
+                         });
+                    }
                 }
+            } catch(e) {
+                next(e);
             }
         });
     } else {
@@ -192,7 +215,7 @@ app.get('/category/:category', function(req, res){
         res.send(renderedTemplate);
     }
 });
-app.get('/', function(req, res){
+app.get('/', function(req, res, next){
     var renderedTemplate;
     var category = 'main';
     
@@ -203,7 +226,10 @@ app.get('/', function(req, res){
         req.session.blah = 1;
     }
     req.session.destroy(function(err){
-        if(err) throw err;
+        if(err) {
+            next(err);
+            return;
+        }
     });
     */
     
@@ -265,7 +291,7 @@ function syncNode(query, content, callback) {
 /**
  * Return info on a language node and sync it with its repo
  **/
-app.get('/langNode/:id', function(req, res) {
+app.get('/langNode/:id', function(req, res, next) {
     var id = req.params.id;
     db.collection('langNodes').findById(id, function(err, langNode) {
         var renderedTemplate;
@@ -280,7 +306,8 @@ app.get('/langNode/:id', function(req, res) {
         fetchRepo(langNode.repository, function(err, repositoryData) {
             var content, lastGistCommitDate, lastSyncDate;
             if (err) {
-                throw err;
+                next(err);
+                return;
             }
             lastGistCommitDate = new Date(repositoryData.history[0].committed_at);
             lastSyncDate = langNode.lastSync ? new Date(langNode.lastSync) : new Date(0);
@@ -301,8 +328,9 @@ app.get('/langNode/:id', function(req, res) {
                 syncNode({
                     _id: langNode._id
                 }, content, function(err, syncedNode) {
-                    if (err) {
-                        throw err;
+                    if(err) {
+                        next(err);
+                        return;
                     }
                     //Files are kept separately so langNode docs are smaller.
                     //Eventually, I would like to use ghpages
