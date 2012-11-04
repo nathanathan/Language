@@ -2,6 +2,25 @@
 var assert = require('assert');
 var _ = require('underscore')._;
 var EventEmitter = require( "events" ).EventEmitter;
+var winston = require('winston');
+
+var myCustomLevels = {
+    levels: {
+        statepool: 1,
+        functions: 1
+    },
+    colors: {
+        statepool: 'blue',
+        functions: 'green'
+    }
+};
+var logger = new(winston.Logger)({
+    levels: myCustomLevels.levels,
+    transports: [
+        new (winston.transports.Console)({ level: 'functions', colorize: true })
+    ]
+});
+winston.addColors(myCustomLevels.colors);
 
 function replaceStringsWithTerminalObjects(langNode) {
     //Strings syntactic sugar to make it easier to langNode creators to define terminals.
@@ -36,6 +55,35 @@ function initializeRegexs(langNode) {
         });
     }
 }
+/**
+ * Compare two langNodes to see if they are at the same state of the same production rule.
+ **/
+ //TODO: Unit test this.
+ //TODO: Inline categories are not handled.
+function compareLangNodes(langNodeA, langNodeB) {
+    if(langNodeA.category === langNodeB.category){
+        if(langNodeA.parseData.origin === langNodeB.parseData.origin){
+            if(langNodeA.parseData.atComponent === langNodeB.parseData.atComponent){
+                if(langNodeA.parseData.stringIdx === langNodeB.parseData.stringIdx){
+                    //State is the same, now check that the components are the same:
+                    //TODO: Not sure if this works with regexs properly.
+                    //console.log(langNodeA.components);
+                    //console.log(langNodeB.components);
+                    return _.isEqual(langNodeA.components, langNodeB.components);
+                    //Problem comparing compiled regex?
+                    if(langNodeA.components.length === langNodeB.components.length) {
+                        return _.all(_.zip(langNodeA.components, langNodeB.components), function(componentPair) {
+                            return componentPair[0].category === componentPair[1].category &&
+                                componentPair[0].regex === componentPair[1].regex &&
+                                componentPair[0].terminal === componentPair[1].terminal;
+                        });
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
 //Thanks to Luke Z. for suggesting the Earley parser to me.
 //The thing that makes it great for this purpose is that it doesn't have to look at all the non-terminals in the grammar,
 //but it still has reasonable time complexity in the size of the input string.
@@ -58,6 +106,7 @@ module.exports = {
      *    With some query statistics it could even become possible to further prune the grammer by leaving out
      *    highly imporobable parses.
      */
+     //Deprecated
     chartToInterpretations : function (chart) {
          //Returns an array of interpretations. Each interpretation is a corresponding array of components.
         function processComponents(components, colIdx) {
@@ -111,14 +160,13 @@ module.exports = {
         //Note, an emptystring is added to the end of the input array bc
         //the scanner might try to add things when it's on the last char.
         var splitInput = input.split('').concat(['']);
-        console.log(splitInput);
         var chart = _.map(splitInput, function(){
             return [];
         });
         var statePools = [];
         var finishCounter = splitInput.length;
         function finishListener() {
-            console.log("finish");
+            logger.statepool("finish");
             finishCounter--;
             if(finishCounter <= 0){
                 callback(null, chart);
@@ -147,6 +195,7 @@ module.exports = {
                     cLangNode.category = cLangNode.content.category;
                     cLangNode.components = cLangNode.content.components;
                     replaceStringsWithTerminalObjects(cLangNode);
+                    cLangNode.interpretations = [_.map(cLangNode.components, Object.create)];
                     initializeRegexs(cLangNode);
                     statePools[j].emit('add', cLangNode);
                 });
@@ -155,8 +204,8 @@ module.exports = {
             });
         }
         function terminalScanner(langNode, j) {
-            console.log("terminalScanner");
-            console.log(langNode);
+            logger.functions("terminalScanner");
+            logger.functions(JSON.stringify(langNode));
             var componentString = langNode.components[langNode.parseData.atComponent].terminal;
             if(input[j] === componentString[langNode.parseData.stringIdx]) {
                 langNode = Object.create(langNode);
@@ -171,8 +220,8 @@ module.exports = {
             statePools[j].emit('done');
         }
         function regexScanner(langNode, j) {
-            console.log("regexScanner");
-            console.log(langNode);
+            logger.functions("regexScanner");
+            logger.functions(JSON.stringify(langNode));
             var alwaysEmittedNode, matchEmittedNode, inputSlice, modifiedComponent;
             var component = langNode.components[langNode.parseData.atComponent];
             if(j < input.length) {//TODO: Use incremental regexs here to rule out input that can't possibly match.
@@ -186,11 +235,13 @@ module.exports = {
             if(component.compiledRegExp.test(inputSlice)) {
                 matchEmittedNode = Object.create(langNode);
                 matchEmittedNode.parseData = _.clone(langNode.parseData);//Can I use Object.create here?
+                //shallow copy interpretations:
+                matchEmittedNode.interpretations = matchEmittedNode.interpretations.map(function(x){ return x; });
                 //shallow copy component array:
-                matchEmittedNode.components = _.map(matchEmittedNode.components, function(x){return x;});
+                matchEmittedNode.interpretations[0] = _.map(matchEmittedNode.interpretations[0], function(x){return x;});
                 modifiedComponent = _.clone(component);//TODO: modify chart rendering so I can use Object.create here?
                 modifiedComponent.match = inputSlice;
-                matchEmittedNode.components[matchEmittedNode.parseData.atComponent] = modifiedComponent;
+                matchEmittedNode.interpretations[0][matchEmittedNode.parseData.atComponent] = modifiedComponent;
                 matchEmittedNode.parseData.stringIdx++;
                 matchEmittedNode.parseData.atComponent++;
                 matchEmittedNode.parseData.stringIdx = 0;
@@ -200,7 +251,7 @@ module.exports = {
         }
         //this is probably going to be async cause of the lookback
         function completer(langNode, j) {
-            console.log("completer");
+            logger.functions("completer");
             //TODO: This is probably a bug, the chart might not be fully filled out.
             _.each(chart[langNode.parseData.origin], function(originLN, idx) {
                 var originComponent = originLN.components[originLN.parseData.atComponent];
@@ -211,14 +262,12 @@ module.exports = {
                     if( originComponent.category === langNode.category ) {
                         //Make a new state from the origin state
                         originLN = Object.create(originLN);
-                        /*
-                        if(originLN.interpretations){
-                            //Shallow copy the interpretations
-                            originLN.interpretations = originLN.interpretations.map(function(x){ return x; });
-                        } else {
-                            originLN.interpretations
-                        }*/
-                        originLN.components[originLN.parseData.atComponent] = langNode;
+                        //shallow copy interpretations: (important bc the same origin node might be completed by multiple nodes)
+                        originLN.interpretations = originLN.interpretations.map(function(x){ return x; });
+                        //shallow copy component array:
+                        originLN.interpretations[0] = originLN.interpretations[0].map(function(x){ return x; });
+                        originLN.interpretations[0][originLN.parseData.atComponent] = langNode;
+                        //originLN.components[originLN.parseData.atComponent] = langNode;
                         
                         originLN.parseData = _.clone(originLN.parseData);
                         originLN.parseData.atComponent++;
@@ -244,38 +293,31 @@ module.exports = {
             }
             statePool.on('finish', finishListener);
             statePool.on('done', function(){
-                console.log("done");
+                logger.statepool("done");
                 counter--;
                 if( counter === 0 ){
                     statePool.emit('empty');
                 }
             });
             statePool.on('empty', function(){
-                console.log("empty");
+                logger.statepool("empty");
                 if( prevPoolFinished ){
                     statePool.emit('finish');
                 }
             });
             statePool.on('add', function(langNode) {
-                console.log("Adding:");
-                console.log(_.extend({}, langNode));
+                logger.statepool("Adding:");
+                logger.statepool(JSON.stringify(_.extend({}, langNode)));
                 var currentComponent;
                 //Make sure the item is unique.
-                //TODO: Make unit tested function for node comparison.
                 //TODO: I'm not sure what this does with regexs
                 var duplicate = _.find(chart[idx], function(item){
-                    if(langNode.parseData.atComponent === item.parseData.atComponent){
-                        if(langNode.parseData.stringIdx === item.parseData.stringIdx){
-                            if(langNode.category === item.category){
-                                return _.isEqual(langNode.components, item.components);
-                            }
-                        }
-                    }
-                    return false;
+                    return compareLangNodes(langNode, item);
                 });
                 if(duplicate) {
                     console.log("duplicate found.");
-                    //langNode.interpretations.concat(duplicate.interpretations);
+                    console.log(JSON.stringify(duplicate));
+                    duplicate.interpretations = duplicate.interpretations.concat(langNode.interpretations);
                     return;
                 }
                 counter++;
@@ -306,7 +348,8 @@ module.exports = {
                 'atComponent' : 0,
                 'stringIdx' : 0,
                 'origin': 0
-            }
+            },
+            'interpretations' : [[{'category' : startCategory}]]
         });
     }
 };

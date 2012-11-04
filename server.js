@@ -6,8 +6,14 @@ var _ = require('underscore')._;
 var assert = require('assert');
 
 var Handlebars = require('handlebars');
+var ref = require('json-ref');
 Handlebars.registerHelper('stringify', function(object) {
-    return JSON.stringify(_.extend({}, object), 2, 4);
+    try{
+        return JSON.stringify((_.extend({}, object)), 2, 4);
+    }catch(e) {
+        console.log(JSON.stringify(ref.ref(_.extend({}, object)), 2, 4));
+        throw e;
+    }
 });
 //Database:
 var mongo = require('mongoskin');
@@ -120,6 +126,7 @@ app.get('/pages/:id', function(req, res, next) {
 });
 
 function renderChart(input, chart){
+    //TODO: Provide indicator of when colspan is 0.
     return zcache.parseChartTemplate({
         columns : _.map(chart, function(col, colIdx) {
             return _.map(col, function(langNode){
@@ -154,6 +161,8 @@ app.get('/category/:category', function(req, res, next){
             }
         });
         EarleyParser.parse(req.query.q, category, db.collection('langNodes'), function(err, chart){
+            var interpretations = [];
+            var gammaNode;
             if(err){
                 next(err);
                 return;
@@ -172,15 +181,21 @@ app.get('/category/:category', function(req, res, next){
                     res.send('<pre>'+JSON.stringify(deprototype(_.find(chart[chart.length - 1], function(x){return x.category === "GAMMA";})), 2, 4)+'</pre>');
                    // res.send('<pre>'+JSON.stringify(EarleyParser.chartToInterpretations(chart), 2, 4)+'</pre>');
                 } else {
-                    var interpretations;
-                    interpretations = EarleyParser.chartToInterpretations(chart);
-                    interpretations = _.map(interpretations, function(interpretation){
-                        return {
-                            '_id': new mongo.ObjectID(),
-                            'root': interpretation,
-                            'queryId': queryId
-                        };
+                    //interpretations = EarleyParser.chartToInterpretations(chart);
+                    gammaNode = _.find(chart[chart.length - 1], function(x) {
+                        return x.category === "GAMMA";
                     });
+                    if(gammaNode){
+                        interpretations = _.map(gammaNode.interpretations, function(conponents){
+                            //Gamma node interpretations all have one component which corresponds to the queried category langNode
+                            var categoryNode = conponents[0];
+                            return {
+                                '_id': new mongo.ObjectID(),
+                                'root': categoryNode,
+                                'queryId': queryId
+                            };
+                        });
+                    }
                     _.defer(function(){
                         //This is deferred so it can happen whiles the interpretations are inserted.
                         renderedTemplate = zcache.resultsTemplate({
