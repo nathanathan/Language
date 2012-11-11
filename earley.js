@@ -1,8 +1,11 @@
+//TODO: Why am I getting duplicate interpretations for nested lists (e.g. ((1)))
+//TODO: Should regexs have multiple interpretations.
 //TODO: Create StreamList w/ forEachThen, append, and finish methods
 var assert = require('assert');
 var _ = require('underscore')._;
 var EventEmitter = require( "events" ).EventEmitter;
 var winston = require('winston');
+var utils = require('./utils');
 
 var myCustomLevels = {
     levels: {
@@ -176,9 +179,6 @@ module.exports = {
         function predictor(langNode, j) {
             var currentComponent = langNode.components[langNode.parseData.atComponent];
             //console.log("predictor: category: " + currentComponent.category);
-            //I want to know why mongo uses json paths to query nested json objects rather than nested json objects.
-            //I suppose it's easier to write queries by hand, but it's so much cleaner when you generate queries in code.
-            //I hope they eventually do both.
             collection.find({ 'content.category' : currentComponent.category }).toArray(function(err, array) {
                 if (err) throw err;//TODO: Missing categories might be an issue, but perhaps this is only for db errors.
                 _.each(array, function(cLangNode){
@@ -249,7 +249,7 @@ module.exports = {
             }
             statePools[j].emit('done');
         }
-        //this is probably going to be async cause of the lookback
+        //TODO: Wait for the origin statepool to drain before doing the lookback.
         function completer(langNode, j) {
             logger.functions("completer");
             //TODO: This is probably a bug, the chart might not be fully filled out.
@@ -263,12 +263,12 @@ module.exports = {
                         //Make a new state from the origin state
                         originLN = Object.create(originLN);
                         //shallow copy interpretations: (important bc the same origin node might be completed by multiple nodes)
-                        originLN.interpretations = originLN.interpretations.map(function(x){ return x; });
-                        //shallow copy component array:
-                        originLN.interpretations[0] = originLN.interpretations[0].map(function(x){ return x; });
-                        originLN.interpretations[0][originLN.parseData.atComponent] = langNode;
-                        //originLN.components[originLN.parseData.atComponent] = langNode;
-                        
+                        originLN.interpretations = originLN.interpretations.map(function(interpretation){ 
+                            //shallow copy component array:
+                            interpretation = interpretation.map(function(x){ return x; });
+                            interpretation[originLN.parseData.atComponent] = langNode;
+                            return interpretation;
+                        });
                         originLN.parseData = _.clone(originLN.parseData);
                         originLN.parseData.atComponent++;
                         statePools[j].emit('add', originLN);
@@ -292,14 +292,14 @@ module.exports = {
                 prevPoolFinished = true;
             }
             statePool.on('finish', finishListener);
-            statePool.on('done', function(){
+            statePool.on('done', function() {
                 logger.statepool("done");
                 counter--;
                 if( counter === 0 ){
                     statePool.emit('empty');
                 }
             });
-            statePool.on('empty', function(){
+            statePool.on('empty', function() {
                 logger.statepool("empty");
                 if( prevPoolFinished ){
                     statePool.emit('finish');
@@ -311,12 +311,12 @@ module.exports = {
                 var currentComponent;
                 //Make sure the item is unique.
                 //TODO: I'm not sure what this does with regexs
-                var duplicate = _.find(chart[idx], function(item){
+                var duplicate = _.find(chart[idx], function(item) {
                     return compareLangNodes(langNode, item);
                 });
                 if(duplicate) {
-                    console.log("duplicate found.");
-                    console.log(JSON.stringify(duplicate));
+                    console.log("Duplicate found:");
+                    console.log(JSON.stringify(utils.deprototype(langNode), 2, 2));
                     duplicate.interpretations = duplicate.interpretations.concat(langNode.interpretations);
                     return;
                 }
@@ -325,7 +325,7 @@ module.exports = {
                 
                 if(langNode.parseData.atComponent < langNode.components.length) {
                     currentComponent = langNode.components[langNode.parseData.atComponent];
-                    if('terminal' in currentComponent){
+                    if('terminal' in currentComponent) {
                         terminalScanner(langNode, idx);
                     } else if('category' in currentComponent) { //categories are non-terminals
                         predictor(langNode, idx);

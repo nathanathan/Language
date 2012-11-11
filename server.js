@@ -29,6 +29,7 @@ var GitHubApi = require("github");
 var config = require('./config');
 var langNodes = require('./langNodes');
 var EarleyParser = require('./earley');
+var utils = require('./utils');
 
 //  Local cache for static content [fixed and loaded at startup]
 var zcache = {};
@@ -65,28 +66,32 @@ app.get('/health', function(req, res){
     res.send('1');
 });
 
-app.get('/dbg', function(req, res, next) {
-    db.collection('langNodes').find().toArray(function(err, items){
-        if(err) {
-            next(err);
-            return;
-        }
-        res.writeHead(200, {'Content-Type': 'text/plain'});
-        res.end(JSON.stringify(items));
+if(config.debug){
+    //I want most debug functions to be public,
+    //however I'm going to draw a line for now at dumping the entire database.
+    app.get('/dbg', function(req, res, next) {
+        db.collection('langNodes').find().toArray(function(err, items){
+            if(err) {
+                next(err);
+                return;
+            }
+            res.writeHead(200, {'Content-Type': 'text/plain'});
+            res.end(JSON.stringify(items));
+        });
+        return;
     });
-    return;
-});
-app.get('/dbgf', function(req, res, next) {
-    db.collection('files').find().toArray(function(err, items){
-        if(err) {
-            next(err);
-            return;
-        }
-        res.writeHead(200, {'Content-Type': 'text/plain'});
-        res.end(JSON.stringify(items));
+    app.get('/dbgf', function(req, res, next) {
+        db.collection('files').find().toArray(function(err, items){
+            if(err) {
+                next(err);
+                return;
+            }
+            res.writeHead(200, {'Content-Type': 'text/plain'});
+            res.end(JSON.stringify(items));
+        });
+        return;
     });
-    return;
-});
+}
 
 app.get('/interpretations/:id', function(req, res, next) {
     db.collection('interpretations').findById(req.params.id, function(err, interpretation){
@@ -171,14 +176,7 @@ app.get('/category/:category', function(req, res, next){
                 if('chart' in req.query){
                     res.send(renderChart(req.query.q, chart));
                 } else if( 'json' in req.query) {
-                    function deprototype(obby){
-                        if(_.isObject(obby)) {
-                            _.extend(obby, _.extend({}, obby));
-                            _.each(_.values(obby), deprototype);
-                        }
-                        return obby;
-                    }
-                    res.send('<pre>'+JSON.stringify(deprototype(_.find(chart[chart.length - 1], function(x){return x.category === "GAMMA";})), 2, 4)+'</pre>');
+                    res.send('<pre>'+JSON.stringify(utils.deprototype(_.find(chart[chart.length - 1], function(x){return x.category === "GAMMA";})), 2, 4)+'</pre>');
                    // res.send('<pre>'+JSON.stringify(EarleyParser.chartToInterpretations(chart), 2, 4)+'</pre>');
                 } else {
                     //interpretations = EarleyParser.chartToInterpretations(chart);
@@ -197,7 +195,7 @@ app.get('/category/:category', function(req, res, next){
                         });
                     }
                     _.defer(function(){
-                        //This is deferred so it can happen whiles the interpretations are inserted.
+                        //This is deferred so it can happen whilst the interpretations are inserted.
                         renderedTemplate = zcache.resultsTemplate({
                             'interpretations': interpretations,
                             'query': req.query.q,
@@ -377,6 +375,7 @@ app.get('/langNode/:id', function(req, res, next) {
     });
 });
 //TODO: Make way of submitting JSON
+//TODO: Emphasize upsert functionality in documentation
 app.post('/submit', function(req, res) {
     var repository = {
         type: 'gist',
@@ -388,13 +387,21 @@ app.post('/submit', function(req, res) {
             res.send('Error: ' + err);
             return;
         }
-        try{
-            content = JSON.parse(repositoryData.files['languageNode.json'].content);
-        } catch(err) {
-            res.send('Error: ' + err);
-            return;
+        //TODO: Think about this. Duck typing might be more future proof.
+        //Also, I want to be sure the repository was deleted.
+        if(repositoryData.message == "Not Found") {
+            //My approach to deleting is kinda hacky.
+            //The entries are still in the database.
+            content = null;
+        } else {
+            try{
+                content = JSON.parse(repositoryData.files['languageNode.json'].content);
+            } catch(err) {
+                res.send('Error: ' + err);
+                return;
+            }
+            //content.files = repositoryData.files;
         }
-        //content.files = repositoryData.files;
         
         syncNode({
             repository: repository
