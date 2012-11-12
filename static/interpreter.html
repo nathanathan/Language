@@ -30,25 +30,32 @@
     Handlebars.registerHelper('stringify', function(object) {
         return JSON.stringify($.extend({}, object), 2, 4);
     });
+    //Temporairy hack until I switch to lazy arrays (see below).
+    Array.prototype.at = (function(){
+        return function(idx) {
+            return this[idx];
+        };
+    })();
     //TODO: Unit test this function.
+    //This function might be tricky to make lazy.
     function arrayCombinations(arrays) {
         var combinations = [];
         var restCombos;
         if(arrays.length > 1) {
             restCombos = arrayCombinations(arrays.slice(1));
-            if(arrays[0].length == 0){
+            if(arrays.at(0).length == 0){
                 //Empty component arrays cause lots of edge cases.
                 //Maybe they should be considered invalid?
                 combinations.push(restCombos);
                 return;
             }
-            arrays[0].forEach(function(car){
+            arrays.at(0).forEach(function(car){
                 restCombos.forEach(function(combination) {
                     combinations.push([car].concat(combination));
                 });
             });
         } else {
-            combinations = arrays[0].map(function(car){
+            combinations = arrays.at(0).map(function(car){
                 return [car];
             });
         }
@@ -56,6 +63,13 @@
     }
     console.assert(arrayCombinations([[1]])[0][0]===1);
 
+    /**
+     * evaluate returns an array of values corresponding to all possible interpretations or a langNode.
+     * I would like to make this lazy because I think short circuting could help
+     * a lot with preventing needless enumeration of interpretations.
+     * However, that turns out to be a tall order. I think it will require lazy arrays
+     * with lazyMap and lazyFlatten functions. To support this I'm using an `at` function rather brackets.
+     **/
     function evaluate(component) {
         var componentEvaluator = function(components){return components;};
         var outInterps = [];
@@ -66,7 +80,6 @@
                 componentEvaluator = eval('('+component.content.implementation+')');
             }
         }
-        
         
         if('terminal' in component) {
             outInterps = [component.terminal];
@@ -82,7 +95,6 @@
             //but I think I would also have to handle interpretations in the primative evaluation functions,
             //which sounds really bad.
             component.interpretations = component.interpretations.map(function(interpretation) {
-                //TODO: Make this lazy
                 return {
                     components : interpretation,
                     evaluatedComponents : interpretation.map(evaluate),
