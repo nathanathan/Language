@@ -36,106 +36,119 @@
             return this[idx];
         };
     })();
+    
     //TODO: Unit test this function.
     //This function might be tricky to make lazy.
-    function arrayCombinations(arrays) {
-        var combinations = [];
-        var restCombos;
-        if(arrays.length > 1) {
-            restCombos = arrayCombinations(arrays.slice(1));
-            if(arrays.at(0).length == 0){
-                //Empty component arrays cause lots of edge cases.
-                //Maybe they should be considered invalid?
-                combinations.push(restCombos);
-                return;
-            }
-            arrays.at(0).forEach(function(car){
-                restCombos.forEach(function(combination) {
-                    combinations.push([car].concat(combination));
+    /**
+     * Generate array combinations from left to right.
+     * TODO: more detail
+     **/
+    function arrayCombinations(arrays, callback) {
+        if(arrays.length > 0) {
+            //Empty component arrays would probably cause a problem here.
+            //I'm going to make them required. At the very least they should contain the empty string.
+            if(arrays.at(0).length > 0){
+                arrays.at(0).forEach(function(car){
+                    arrayCombinations(arrays.slice(1), function(combination){
+                        callback([car].concat(combination));
+                    });
                 });
-            });
+            }
         } else {
-            combinations = arrays.at(0).map(function(car){
-                return [car];
-            });
+            callback([])
         }
-        return combinations;
     }
-    console.assert(arrayCombinations([[1]])[0][0]===1);
+    
+    var tested = 0;
+    arrayCombinations([[1]], function(combo) {
+        tested++;
+        console.assert(combo[0] === 1);
+    });
+    arrayCombinations([[1,2],[3]], function(combo) {
+        tested++;
+        console.assert(combo[1] === 3);
+    });
+    console.assert(tested === 3);
 
     /**
-     * evaluate returns an array of values corresponding to all possible interpretations or a langNode.
+     * evaluate a languageNode and call the callback mulitple times with each interpretation.
      * I would like to make this lazy because I think short circuting could help
      * a lot with preventing needless enumeration of interpretations.
      * However, that turns out to be a tall order. I think it will require lazy arrays
      * with lazyMap and lazyFlatten functions. To support this I'm using an `at` function rather brackets.
      **/
-    function evaluate(component) {
-        var componentEvaluator = function(components){return components;};
-        var outInterps = [];
-        
-        if('content' in component) {
-            if('implementation' in component.content) {
-                //console.log(component.content.implementation);
-                componentEvaluator = eval('('+component.content.implementation+')');
+    function evaluate(component, callback) {
+        var callbackWithEvaledComps = function(components) {
+            var componentEvaluator = function(components){return components;};
+            if('content' in component) {
+                if('implementation' in component.content) {
+                    //console.log(component.content.implementation);
+                    //TODO: Make this eval less evil.
+                    componentEvaluator = eval('('+component.content.implementation+')');
+                }
             }
-        }
+            setTimeout(function() {
+                try {
+                    console.log(components);
+                    callback(componentEvaluator.call(component, components));
+                } catch (e) {
+                    console.error(componentEvaluator);
+                    console.error(component);
+                    console.error(components);
+                    //TODO: Add an error parameter to the evaluate callbacks.
+                    throw e;
+                }
+            }, 0);
+        };
         
         if('terminal' in component) {
-            outInterps = [component.terminal];
+            callbackWithEvaledComps([component.terminal]);
         } else if('match' in component) {
             //TODO: can there be multiple matches?
-            outInterps = [component.match];
+            callbackWithEvaledComps([component.match]);
         } else if('interpretations' in component) {
-            
             //Q: Is it better for primative evaluation functions to take the unevaluated parse tree below them as an arg
             //or take the evaluated child nodes as an arg?
             //Taking the parse tree gives more control, but adds an additional function I have to call.
             //Actually calling the extra function doesn't sound bad,
             //but I think I would also have to handle interpretations in the primative evaluation functions,
             //which sounds really bad.
-            component.interpretations = component.interpretations.map(function(interpretation) {
-                return {
-                    components : interpretation,
-                    evaluatedComponents : interpretation.map(evaluate),
-                };
-            });
             component.interpretations.forEach(function(interpretation) {
-                //console.error(interpretation.evaluatedComponents);
-                var evaledComponentsInterps = arrayCombinations(interpretation.evaluatedComponents);
-                //console.error(evaledComponentsInterps);
-                outInterps = outInterps.concat(evaledComponentsInterps);
+                var componentsEvaluatedSoFar = interpretation.map(function(){return [];})
+                function combinationGenerator(possibleValue, idx, callback) {
+                    arrayCombinations(componentsEvaluatedSoFar.slice(0,idx), function(leftCombo){
+                        arrayCombinations(componentsEvaluatedSoFar.slice(idx + 1), function(rightCombo){
+                            callback(leftCombo.reverse().concat([possibleValue]).concat(rightCombo))
+                        });
+                    });
+                }
+                interpretation.forEach(function(component, idx) {
+                    evaluate(component, function(possibleValue) {
+                        combinationGenerator(possibleValue, idx, function(combination){
+                            callbackWithEvaledComps(combination);
+                        });
+                        //I'm worrying about a callback order problem here.
+                        componentsEvaluatedSoFar[idx].push(possibleValue);
+                    });
+                });
             });
         } else {
             console.error(component);
             throw new Error('?');
         }
-        console.log(outInterps);
-        /*
-        console.log(outInterps.map(function(interpretation){
-            return componentEvaluator.call(component, interpretation);
-        }));*/
-        return outInterps.map(function(interpretation){
-            return componentEvaluator.call(component, interpretation);
-        });
     }
     
     $(function() {
-        
         var interpId = $.url().param('interpId');
         $.getJSON('../interpretations/' + interpId, function(data) {
             console.log(JSON.stringify(data.root));
             //TODO: Where should the evaluation start?
-            evaluate(data.root.interpretations[0][0]).forEach(function(interpretation) {
+            evaluate(data.root.interpretations[0][0], function(interpretation) {
                 var $p = $('<p>');
                 $p.text(JSON.stringify(interpretation));
                 $('.content').append($p);
             });
         });
-        /*
-        console.log('X');
-        console.log(evaluate({"interpretations":[[{"parseData":{"atComponent":3,"stringIdx":0,"origin":0},"interpretations":[[{"terminal":"("},{"interpretations":[[{"parseData":{"atComponent":1,"stringIdx":0,"origin":1},"interpretations":[[{"regex":"\\d+(\\.\\d+)?","compiledRegExp":{},"match":"1"}]],"_id":"508da1d014a8fca63f610c57","content":{"category":"s_exp","components":[{"regex":"\\d+(\\.\\d+)?","compiledRegExp":{}}]},"lastSync":"Sun Oct 28 2012 17:21:20 GMT-0400 (EDT)","repository":{"type":"gist","gistId":"3969897"},"category":"s_exp","components":[{"regex":"\\d+(\\.\\d+)?","compiledRegExp":{}}]},{"terminal":" "},{"interpretations":[[{"parseData":{"atComponent":1,"stringIdx":0,"origin":3},"interpretations":[[{"regex":"\\d+(\\.\\d+)?","compiledRegExp":{},"match":"1"}]],"_id":"508da1d014a8fca63f610c57","content":{"category":"s_exp","components":[{"regex":"\\d+(\\.\\d+)?","compiledRegExp":{}}]},"lastSync":"Sun Oct 28 2012 17:21:20 GMT-0400 (EDT)","repository":{"type":"gist","gistId":"3969897"},"category":"s_exp","components":[{"regex":"\\d+(\\.\\d+)?","compiledRegExp":{}}]}]],"parseData":{"atComponent":1,"stringIdx":0,"origin":3},"_id":"508dd3a614a8fca63f610c5c","content":{"category":"s_list","components":[{"category":"s_exp"}]},"lastSync":"Sun Oct 28 2012 20:53:58 GMT-0400 (EDT)","repository":{"type":"gist","gistId":"3970764"},"category":"s_list","components":[{"category":"s_exp"}]}]],"parseData":{"atComponent":3,"stringIdx":0,"origin":1},"_id":"508da1b414a8fca63f610c55","content":{"category":"s_list","components":[{"category":"s_exp"}," ",{"category":"s_list"}]},"lastSync":"Sun Oct 28 2012 17:20:52 GMT-0400 (EDT)","repository":{"type":"gist","gistId":"3969884"},"category":"s_list","components":[{"category":"s_exp"},{"terminal":" "},{"category":"s_list"}]},{"terminal":")"}]],"_id":"508da1c114a8fca63f610c56","content":{"category":"s_exp","components":["(",{"category":"s_list"},")"],"implementation":"listImpl"},"lastSync":"Sun Nov 04 2012 15:38:54 GMT-0500 (EST)","repository":{"type":"gist","gistId":"3969887"},"category":"s_exp","components":[{"terminal":"("},{"category":"s_list"},{"terminal":")"}]}]],"parseData":{"atComponent":1,"stringIdx":0,"origin":0},"_id":"508c4d5714a8fca63f610c47","content":{"category":"main","components":[{"category":"s_exp"}],"url":"/interpreter.html"},"lastSync":"Sun Nov 04 2012 15:38:05 GMT-0500 (EST)","repository":{"type":"gist","gistId":"3966264"},"category":"main","components":[{"category":"s_exp"}]} ));
-        */
     });
     </script>
 </head>
