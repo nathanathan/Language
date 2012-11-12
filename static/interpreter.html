@@ -55,35 +55,7 @@
         return combinations;
     }
     console.assert(arrayCombinations([[1]])[0][0]===1);
-    //TODO: Test getJSONPath/setJSONPath. BTW they aren't used in here.
-    function getJSONPath(object, path, defaultValue) {
-        if(typeof path == "string") {
-            path = path.split('.');
-        }
-        var pathComponent = path[0];
-        if(path.length === 1){
-            return (pathComponent in object) ? object[pathComponent] : defaultValue;
-        } else {
-            if( !(pathComponent in object) || (typeof object[pathComponent] != "object")) {
-                return defaultValue
-            }
-            return setJSONPath(object[pathComponent], path.slice(1), defaultValue)
-        }
-    }
-    function setJSONPath(object, path, value) {
-        if(typeof path == "string") {
-            path = path.split('.');
-        }
-        var pathComponent = path[0];
-        if(path.length === 1){
-            object[pathComponent] = value;
-        } else {
-            if( !(pathComponent in object) || (typeof object[pathComponent] != "object")) {
-                object[pathComponent] = {};
-            }
-            setJSONPath(object[pathComponent], path.slice(1), value)
-        }
-    }
+
     function evaluate(component) {
         var componentEvaluator = function(components){return components;};
         var outInterps = [];

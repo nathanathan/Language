@@ -17,6 +17,7 @@ var myCustomLevels = {
         functions: 'green'
     }
 };
+//TODO: Remember to comment out logging for greater efficiency.
 var logger = new(winston.Logger)({
     levels: myCustomLevels.levels,
     transports: [
@@ -168,13 +169,7 @@ module.exports = {
         });
         var statePools = [];
         var finishCounter = splitInput.length;
-        function finishListener() {
-            logger.statepool("finish");
-            finishCounter--;
-            if(finishCounter <= 0){
-                callback(null, chart);
-            }
-        }
+        
         //This is async.
         function predictor(langNode, j) {
             var currentComponent = langNode.components[langNode.parseData.atComponent];
@@ -249,59 +244,77 @@ module.exports = {
             }
             statePools[j].emit('done');
         }
-        //TODO: Wait for the origin statepool to drain before doing the lookback.
+        
         function completer(langNode, j) {
-            logger.functions("completer");
-            //TODO: This is probably a bug, the chart might not be fully filled out.
-            _.each(chart[langNode.parseData.origin], function(originLN, idx) {
-                var originComponent = originLN.components[originLN.parseData.atComponent];
-                //This assumes we are completing non-terminals.
-                if(originLN.parseData.atComponent < originLN.components.length) {
-                    //TODO: Think about this more.
-                    //if( originComponent === langNode || originComponent.isPrototypeOf(langNode)) {
-                    if( originComponent.category === langNode.category ) {
-                        //Make a new state from the origin state
-                        originLN = Object.create(originLN);
-                        //shallow copy interpretations: (important bc the same origin node might be completed by multiple nodes)
-                        originLN.interpretations = originLN.interpretations.map(function(interpretation){ 
-                            //shallow copy component array:
-                            interpretation = interpretation.map(function(x){ return x; });
-                            interpretation[originLN.parseData.atComponent] = langNode;
-                            return interpretation;
-                        });
-                        originLN.parseData = _.clone(originLN.parseData);
-                        originLN.parseData.atComponent++;
-                        statePools[j].emit('add', originLN);
+            function completerCallback() {
+                logger.functions("completer " + j);
+                _.each(chart[langNode.parseData.origin], function(originLN, idx) {
+                    var originComponent = originLN.components[originLN.parseData.atComponent];
+                    //This assumes we are completing non-terminals.
+                    if(originLN.parseData.atComponent < originLN.components.length) {
+                        //TODO: Think about this more.
+                        //if( originComponent === langNode || originComponent.isPrototypeOf(langNode)) {
+                        if( originComponent.category === langNode.category ) {
+                            //Make a new state from the origin state
+                            originLN = Object.create(originLN);
+                            //shallow copy interpretations: (important bc the same origin node might be completed by multiple nodes)
+                            originLN.interpretations = originLN.interpretations.map(function(interpretation){ 
+                                //shallow copy component array:
+                                interpretation = interpretation.map(function(x){ return x; });
+                                interpretation[originLN.parseData.atComponent] = langNode;
+                                return interpretation;
+                            });
+                            originLN.parseData = _.clone(originLN.parseData);
+                            originLN.parseData.atComponent++;
+                            statePools[j].emit('add', originLN);
+                        }
                     }
-                }
-            });
-            statePools[j].emit('done');
+                });
+                statePools[j].emit('done');
+            }
+            //Wait for the origin statepool to drain before doing the lookback.
+            if(statePools[langNode.parseData.origin].finished) {
+                completerCallback();
+            } else {
+                //I have this log statement because I want proof that this actually happens.
+                console.log("Origin pool not drained!");
+                statePools[langNode.parseData.origin].once('finish', completerCallback);
+            }
         }
         _.each(splitInput, function(character, idx) {
             var statePool = new EventEmitter();
-            var counter = 0;//counts items remaining the the pool
-            var prevPoolFinished = false;
-            if(idx > 0){
-                statePools[idx-1].on('finish', function(){
-                    prevPoolFinished = true;
-                    if( counter === 0 ){
-                        statePool.emit('empty');
-                    }
+            //counts unprocessed langNodes remaining the the pool
+            statePool.counter = 0;
+            
+            //Chain all the statepools' finish events together.
+            if(idx > 0) {
+                statePools[idx-1].once('finish', function() {
+                    if( statePool.counter === 0 ){
+                        statePool.emit('finish');
+                    } //otherwise finish will be emited when the pool is empty.
                 });
-            } else {
-                prevPoolFinished = true;
             }
-            statePool.on('finish', finishListener);
+            //finish is fired when this pool and all the previous pools are empty.
+            //I'm not positive it is fired only once, it should be, but I'm using "once" callbacks to be safe.
+            statePool.once('finish', function() {
+                logger.statepool("finish " + idx);
+                statePool.finished = true;
+                finishCounter--;
+                if(finishCounter <= 0){
+                    callback(null, chart);
+                }
+            });
+            //done is fired when a single state in the pool finishes processing.
             statePool.on('done', function() {
                 logger.statepool("done");
-                counter--;
-                if( counter === 0 ){
+                statePool.counter--;
+                if( statePool.counter === 0 ){
                     statePool.emit('empty');
                 }
             });
             statePool.on('empty', function() {
                 logger.statepool("empty");
-                if( prevPoolFinished ){
+                if( idx === 0 || statePools[idx-1].finished ){
                     statePool.emit('finish');
                 }
             });
@@ -320,7 +333,7 @@ module.exports = {
                     duplicate.interpretations = duplicate.interpretations.concat(langNode.interpretations);
                     return;
                 }
-                counter++;
+                statePool.counter++;
                 chart[idx].push(langNode);
                 
                 if(langNode.parseData.atComponent < langNode.components.length) {
