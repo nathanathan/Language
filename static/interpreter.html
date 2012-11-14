@@ -78,12 +78,22 @@
      * with lazyMap and lazyFlatten functions. To support this I'm using an `at` function rather brackets.
      **/
     function evaluate(component, callback) {
-        var callbackWithEvaledComps = function(components) {
+        /**
+         * Evalutae the given array of components (possibly using the function
+         * specified by the current component) and pass the result into the callback function.
+         **/
+        var evalThenCallback = function(components) {
+            //Q: Is it better for components to be evaluated prior to being passed into this function?
+            //Unevaluated compoents give the componentEvaluator more control over performance,
+            //although dealing with multiple interpretations in componentEvaluator functions
+            //seems like it would be a headache.
             var componentEvaluator = function(components){return components;};
             if('content' in component) {
                 if('implementation' in component.content) {
                     //console.log(component.content.implementation);
                     //TODO: Make this eval less evil.
+                    //The componentEvaluator's `this` keyword is bound to the component,
+                    //so the full parseTree is available to it through this.interpretations.
                     componentEvaluator = eval('('+component.content.implementation+')');
                 }
             }
@@ -102,30 +112,21 @@
         };
         
         if('terminal' in component) {
-            callbackWithEvaledComps([component.terminal]);
+            evalThenCallback([component.terminal]);
         } else if('match' in component) {
             //TODO: can there be multiple matches?
-            callbackWithEvaledComps([component.match]);
+            evalThenCallback([component.match]);
         } else if('interpretations' in component) {
-            //Q: Is it better for primative evaluation functions to take the unevaluated parse tree below them as an arg
-            //or take the evaluated child nodes as an arg?
-            //Taking the parse tree gives more control, but adds an additional function I have to call.
-            //Actually calling the extra function doesn't sound bad,
-            //but I think I would also have to handle interpretations in the primative evaluation functions,
-            //which sounds really bad.
             component.interpretations.forEach(function(interpretation) {
-                var componentsEvaluatedSoFar = interpretation.map(function(){return [];})
-                function combinationGenerator(possibleValue, idx, callback) {
-                    arrayCombinations(componentsEvaluatedSoFar.slice(0,idx), function(leftCombo){
-                        arrayCombinations(componentsEvaluatedSoFar.slice(idx + 1), function(rightCombo){
-                            callback(leftCombo.reverse().concat([possibleValue]).concat(rightCombo))
-                        });
-                    });
-                }
+                var componentsEvaluatedSoFar = interpretation.map(function(){return [];});
                 interpretation.forEach(function(component, idx) {
                     evaluate(component, function(possibleValue) {
-                        combinationGenerator(possibleValue, idx, function(combination){
-                            callbackWithEvaledComps(combination);
+                        //Generate all the possible combinations of values so far.
+                        arrayCombinations(componentsEvaluatedSoFar.slice(0,idx), function(leftCombo){
+                            arrayCombinations(componentsEvaluatedSoFar.slice(idx + 1), function(rightCombo){
+                                var combination = leftCombo.concat([possibleValue]).concat(rightCombo);
+                                evalThenCallback(combination);
+                            });
                         });
                         //I'm worrying about a callback order problem here.
                         componentsEvaluatedSoFar[idx].push(possibleValue);
