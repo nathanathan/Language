@@ -62,8 +62,8 @@ function initializeRegexs(langNode) {
 /**
  * Compare two langNodes to see if they are at the same state of the same production rule.
  **/
- //TODO: Unit test this.
- //TODO: Inline categories are not handled.
+//TODO: Unit test this.
+//TODO: Inline categories are not handled.
 function compareLangNodes(langNodeA, langNodeB) {
     if(langNodeA.category === langNodeB.category){
         if(langNodeA.parseData.origin === langNodeB.parseData.origin){
@@ -78,7 +78,7 @@ function compareLangNodes(langNodeA, langNodeB) {
                     if(langNodeA.components.length === langNodeB.components.length) {
                         return _.all(_.zip(langNodeA.components, langNodeB.components), function(componentPair) {
                             return componentPair[0].category === componentPair[1].category &&
-                                componentPair[0].regex === componentPair[1].regex &&
+                                componentPair[0].match === componentPair[1].match &&
                                 componentPair[0].terminal === componentPair[1].terminal;
                         });
                     }
@@ -87,6 +87,32 @@ function compareLangNodes(langNodeA, langNodeB) {
         }
     }
     return false;
+}
+function mergeInterpretations(interpsA, interpsB){
+    interpsB.forEach(function(interpB){
+        if(interpsA.every(function(interpA){
+                var  componentIdx = 0;
+                var compA, compB;
+                //interpA and interpB must have the same length
+                while( componentIdx < interpA.length ) {
+                    compA = interpA[componentIdx];
+                    compB = interpB[componentIdx];
+                    if('interpretations' in compA && 'interpretations' in compB) {
+                        if(compareLangNodes(compA, compB)) {
+                            mergeInterpretations(compA.interpretations, compB.interpretations);
+                            return false;
+                        } else {
+                            return true;
+                        }
+                    } else {
+                        return !(compA.terminal === compB.terminal && interpA.match === compB.match);
+                    }
+                }
+            })) {
+            //some inefficiency since we don't need to iterate over the new interp.
+            interpsA.push(interpB);
+        }
+    });
 }
 //Thanks to Luke Z. for suggesting the Earley parser to me.
 //The thing that makes it great for this purpose is that it doesn't have to look at all the non-terminals in the grammar,
@@ -152,6 +178,8 @@ module.exports = {
             return interpretationsTree;
         }
     },
+    //TODO: I would like to make a streaming version of this.
+    //i.e. it would synchronously return an empty parsechart with async events you can bind to.
     parse : function (input, startCategory, collection, callback) {
         if(!input) {
             callback('No input');
@@ -175,15 +203,18 @@ module.exports = {
             var currentComponent = langNode.components[langNode.parseData.atComponent];
             //console.log("predictor: category: " + currentComponent.category);
             collection.find({ 'content.category' : currentComponent.category }).toArray(function(err, array) {
-                if (err) throw err;//TODO: Missing categories might be an issue, but perhaps this is only for db errors.
+                if (err) {
+                    //TODO: I think err is only for db errors.
+                    //In that case a warning to the user that the result set is incomplete might be nice.
+                    array = [];
+                };
                 _.each(array, function(cLangNode){
-                    //TODO: Perhaps more stringIdx into terminals and do something similar with regexs
+                    //TODO: Maybe use objects with functions for dealing with parse data on terminals and regexs.
                     cLangNode.parseData = {
                         'atComponent' : 0,
                         'stringIdx' : 0,
                         'origin' : j
                     };
-
                     //Putting category/components at the top level might make things easier to deal with
                     //if there are nested categories declaired inline in a langNode.json file,
                     //not that I have support for this yet.
@@ -195,6 +226,7 @@ module.exports = {
                     statePools[j].emit('add', cLangNode);
                 });
                 //I'm assuming that emited events happen in order or emission.
+                //Otherwise the statepool might seem to be empty and finish before all the predicted nodes are added.
                 statePools[j].emit('done');
             });
         }
@@ -233,11 +265,10 @@ module.exports = {
                 //shallow copy interpretations:
                 matchEmittedNode.interpretations = matchEmittedNode.interpretations.map(function(x){ return x; });
                 //shallow copy component array:
-                matchEmittedNode.interpretations[0] = _.map(matchEmittedNode.interpretations[0], function(x){return x;});
+                matchEmittedNode.interpretations[0] = matchEmittedNode.interpretations[0].map(function(x){ return x; });
                 modifiedComponent = _.clone(component);//TODO: modify chart rendering so I can use Object.create here?
                 modifiedComponent.match = inputSlice;
                 matchEmittedNode.interpretations[0][matchEmittedNode.parseData.atComponent] = modifiedComponent;
-                matchEmittedNode.parseData.stringIdx++;
                 matchEmittedNode.parseData.atComponent++;
                 matchEmittedNode.parseData.stringIdx = 0;
                 statePools[j].emit('add', matchEmittedNode);
@@ -328,9 +359,15 @@ module.exports = {
                     return compareLangNodes(langNode, item);
                 });
                 if(duplicate) {
+                    //Duplicates generate interpretations.
+                    //I'm not sure if that's the right way to do it.
+                    //When I rewrite this I think I will go back to using a separate
+                    //step to generate the tree, however I will attempt to make that step streaming
+                    //so it can happen as the parse chart is genrated.
                     console.log("Duplicate found:");
                     console.log(JSON.stringify(utils.deprototype(langNode), 2, 2));
-                    duplicate.interpretations = duplicate.interpretations.concat(langNode.interpretations);
+                    //duplicate.interpretations = duplicate.interpretations.concat(langNode.interpretations);
+                    mergeInterpretations(duplicate.interpretations, langNode.interpretations);
                     return;
                 }
                 statePool.counter++;

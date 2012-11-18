@@ -69,13 +69,23 @@
         console.assert(combo[1] === 3);
     });
     console.assert(tested === 3);
+/*
+Using a callback in evaluate might not turn out to be the right approach bc it might cause the at() function to be async.
 
+The concrete problem I have now is variable binding.
+Right now I'm evaluating bottom up, but I can't evaluate a variable inside a let block this way.
+I see two ways out of this:
+1. Evaluate top down by treating components as promises and using the at function to force them
+2. When unbound variables are encountered delay their evaluation until we go back up the tree.
+
+1 seems like the better option.
+
+Another thing I've been thinking about is how to make it so I can see an "evaluation tree".
+The root could be the *set* of possible value or the most common value.
+Clicking on a value would show its derivations and the values they rely on.
+*/
     /**
      * evaluate a languageNode and call the callback mulitple times with each interpretation.
-     * I would like to make this lazy because I think short circuting could help
-     * a lot with preventing needless enumeration of interpretations.
-     * However, that turns out to be a tall order. I think it will require lazy arrays
-     * with lazyMap and lazyFlatten functions. To support this I'm using an `at` function rather brackets.
      **/
     function evaluate(component, callback) {
         /**
@@ -121,7 +131,7 @@
                 var componentsEvaluatedSoFar = interpretation.map(function(){return [];});
                 interpretation.forEach(function(component, idx) {
                     evaluate(component, function(possibleValue) {
-                        //Generate all the possible combinations of values so far.
+                        //Generate all the possible combinations of values so far
                         arrayCombinations(componentsEvaluatedSoFar.slice(0,idx), function(leftCombo){
                             arrayCombinations(componentsEvaluatedSoFar.slice(idx + 1), function(rightCombo){
                                 var combination = leftCombo.concat([possibleValue]).concat(rightCombo);
