@@ -97,7 +97,7 @@ Clicking on a value would show its derivations and the values they rely on.
             //Unevaluated compoents give the componentEvaluator more control over performance,
             //although dealing with multiple interpretations in componentEvaluator functions
             //seems like it would be a headache.
-            var componentEvaluator = function(components){return components;};
+            var componentEvaluator = function(components){ return components; };
             if('content' in component) {
                 if('implementation' in component.content) {
                     //console.log(component.content.implementation);
