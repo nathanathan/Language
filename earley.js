@@ -308,6 +308,7 @@ module.exports = {
                 completerCallback();
             } else {
                 //I have this log statement because I want proof that this actually happens.
+                //UPDATE: It does happen. At least for now.
                 console.log("Origin pool not drained!");
                 statePools[langNode.parseData.origin].once('finish', completerCallback);
             }
