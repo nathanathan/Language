@@ -6,11 +6,13 @@ var _ = require('underscore')._;
 var EventEmitter = require( "events" ).EventEmitter;
 var winston = require('winston');
 var utils = require('./utils');
+var config = require('./config');
 
 var myCustomLevels = {
     levels: {
         statepool: 1,
-        functions: 1
+        functions: 1,
+        off: 10
     },
     colors: {
         statepool: 'blue',

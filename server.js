@@ -6,12 +6,12 @@ var _ = require('underscore')._;
 var assert = require('assert');
 
 var Handlebars = require('handlebars');
-var ref = require('json-ref');
+//var ref = require('json-ref');
 Handlebars.registerHelper('stringify', function(object) {
     try{
         return JSON.stringify((_.extend({}, object)), 2, 4);
     }catch(e) {
-        console.log(JSON.stringify(ref.ref(_.extend({}, object)), 2, 4));
+        //console.log(JSON.stringify(ref.ref(_.extend({}, object)), 2, 4));
         throw e;
     }
 });
