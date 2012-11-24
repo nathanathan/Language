@@ -16,32 +16,41 @@
 		</form>
 	</center>
     <h3>How do I create a language node?</h3>
-    <p>Create a <a href="http://gist.github.com" target="parent">gist</a> like this one, then submit its id in the form above.</p>
+    <p>Create a <a href="http://gist.github.com" target="parent">gist</a> like this one, then submit its id in the form above. (Be sure to name it languageNode.json)</p>
     <script src="https://gist.github.com/4036962.js?file=languageNode.json"></script>
-    <h3>What do all the properties in languageNode.json mean?</h3>
+    <h3>What do all the languageNode.json properties mean?</h3>
     <ol>
         <li>
             <strong>category:</strong>
             <p>
-            This will usually be "main" meaning that the widget will attempt to parse all the queries from the main page.
-            If you have a mathematical widget that would be be suited for queries done under the math category,
-            then you should set your category to "math".
-            Another use of category is to make language nodes that are used to help other widgets parse queries.
-            For example, you might make a "square" language node in the "shape" category so a drawing widget can parse "draw a square".
+            The category property can be used to target a widget to a specific category of queries.
+            For example, if the category is set to "math" the widget will only appear for queries performed under the math category,
+            and if the category is set to "main" the widget will only appear for queries from the main page.
+            </p>
+            <p>
+            Categories can also be used to make language nodes that help other widgets parse queries.
+            For example, someone could make a "square" language node in the "shape" category so a drawing widget can parse "draw a square".
             </p>
     	</li>
         <li>
             <strong>components:</strong>
             <p>
-            An ordered list of components that compose the queries you want your widget to appear for.
-            Compontents can be strings, regular expressions, or categories.
+            The components define the way the language node will try to parse queries.
+            This is best explained via example:
             </p>
+            <p>
+            A language node that parses queries of the form "population of [country] since [year]" might have a components array like this:
+            </p>
+            <code>
+            ["population of ", {"category": "countries"}, " since ", {"regex":"\\d{4}"}]
+            </code>
+            <p>Components can be strings, regular expressions, or categories.</p>
         </li>
         <li>
             <strong>url:</strong>
-            <p>This is the url of the webcontent you want to display inside your widget.</p>
+            <p>This is the url of the web content you want to display in your widget.</p>
             <p>
-                When your widget is displayed it will be passed a "interpId" url parameter which can be used to get the (multi-)parse tree.
+                When a widget is displayed it is provided with a "interpId" url parameter that can be used to get the (multi-)parse tree.
                 <a href="https://github.com/nathanathan/LanguageWidgets" target="parent">For an example, take a look at the plot widget here.</a>
             </p>
             <p>If you don't want to host your widget, you can include it in your gist in a "index.html" file. (Be sure there is no url property in that case.)</p>
@@ -49,7 +58,7 @@
 	</ol>
     <p>
     Language nodes may include arbitrary additional properties.
-    These can be useful for adding annotations to the parse tree sent to your widget.
+    These can be useful for adding annotations to the parse tree.
     For example, attaching coordinates to language nodes in the "shape" category could make it easier to create shape drawing widgets since the widgets wouldn't need to know about all the different shapes,
     they could do all their drawing based on the coordinates.
     </p>

@@ -94,6 +94,7 @@ if(config.debug){
 }
 
 app.get('/interpretations/:id', function(req, res, next) {
+    res.header("Access-Control-Allow-Origin", "*");
     db.collection('interpretations').findById(req.params.id, function(err, interpretation){
         if(err) {
             next(err);
@@ -199,7 +200,8 @@ app.get('/category/:category', function(req, res, next){
                         renderedTemplate = zcache.resultsTemplate({
                             'interpretations': interpretations,
                             'query': req.query.q,
-                            'category': category
+                            'category': category,
+                            'serverUrl': encodeURIComponent(config.serverUrl)
                         });
                     });
                     if(interpretations.length > 0){

@@ -19,7 +19,7 @@
         <div class='interpretation'>
         	<iframe class="content"
             {{#if root.content.url}}
-                src="{{root.content.url}}?interpId={{_id}}"
+                src="{{root.content.url}}?interpId={{_id}}&serverUrl={{../../serverUrl}}"
             {{else}}
                 src="../pages/{{root._id}}?interpId={{_id}}"
             {{/if}}

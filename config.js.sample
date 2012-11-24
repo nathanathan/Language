@@ -1,1 +1,2 @@
 exports.databaseUrl = "user:password@mongohq.com:port/databasename";
+exports.serverUrl = "http://your.servers.url.com";
