@@ -20,6 +20,8 @@ A widget is a small webpage that performs a particular function relevant to the 
 Live Examples:
 --------------
 
+You can see the languageNodes used in all these examples by clicking more->view source.
+
 * [(+ 1 2 (+ 3 4 5))](https://language-nathanathan.rhcloud.com/category/main?q=%28%2B+1+2+%28%2B+3+4+5%29%29)
 * [population of Canada since 1970](https://language-nathanathan.rhcloud.com/category/main?q=population+of+Canada+since+1970)
 * [paint a picture](https://language-nathanathan.rhcloud.com/category/example%20widgets?q=paint+a+picture)
@@ -110,7 +112,7 @@ Interpretation: (Add "&json=true" to your url search strings to see what things 
                 description: "The interpretations of the query",
                 type: "array",
                 items: {
-                    type: object,
+                    type: "object",
                     description: "A langNode extended with an interpretations array like this one."
                 }
             }
@@ -121,13 +123,30 @@ Interpretation: (Add "&json=true" to your url search strings to see what things 
 Server API:
 ---------------
 
-upsert language node
+Upsert language node
 
-get parse tree
+TODO
 
+Get parse tree:
+
+```javascript
+//This example uses jQuery and jQuery-URL-Parser
+var interpId = $.url().param('interpId'); 
+$.getJSON($.url().param('serverUrl') + '/interpretations/' + interpId, function(data) {
+	var multiParseTree = data.root;
+});
+```
+
+
+Roadmap:
+--------
+
+There is a need for some kind of API to make it easier to deal with multi-parse trees in widgets. One idea I like for this is having callback functions that get called multiple times for each interpretation.
+
+Voting/ranking is not implemented. This will also require github or some other authentication service to prevent ballot box stuffing. First there needs to be enough widgets that there is a need to rank them though.
 
 In the distant future:
----------------------
+----------------------
 
 Create interface for widgets to request access to resources from the parent site. For example, if the user links their github account to the main site, widgets could request the ability to modify one of the user's repositories from it.
 
