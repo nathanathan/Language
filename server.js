@@ -1,4 +1,7 @@
 #!/bin/env node
+//TODOS:
+//Add a way to change the query category to the UI (aside from using a `category/foo` url).
+//Find out the source of the error that always gets when adding nodes.
 
 var express = require('express');
 var fs      = require('fs');

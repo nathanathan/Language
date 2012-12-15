@@ -37,8 +37,9 @@ Language Terminology for computer scientists:
   
   Components => RHS of production rule
   
-  Interpretation ~> Parse tree
-
+  Interpretation ~> Multi-parse tree*
+  
+*A multi-parse tree differs from a standard parse tree in that each node in it has multiple interpretations under it.
 
 Planned* formats (as json schemas):
 ----------------------------------
@@ -141,9 +142,14 @@ $.getJSON($.url().param('serverUrl') + '/interpretations/' + interpId, function(
 Roadmap:
 --------
 
+Add a way to view usage data.
+For example, making it possible to see the most frequently unparsed queries so it is possible to see what kind of widgets are needed.
+Ideally, this could be done in a widget, but the server will need to expose an api for the queries database.
+
 There is a need for some kind of API to make it easier to deal with multi-parse trees in widgets. One idea I like for this is having callback functions that get called multiple times for each interpretation.
 
 Voting/ranking is not implemented. This will also require github or some other authentication service to prevent ballot box stuffing. First there needs to be enough widgets that there is a need to rank them though.
+
 
 In the distant future:
 ----------------------

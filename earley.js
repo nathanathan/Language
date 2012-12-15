@@ -1,6 +1,3 @@
-//TODO: Why am I getting duplicate interpretations for nested lists (e.g. ((1)))
-//TODO: Should regexs have multiple interpretations.
-//TODO: Create StreamList w/ forEachThen, append, and finish methods
 var assert = require('assert');
 var _ = require('underscore')._;
 var EventEmitter = require( "events" ).EventEmitter;
@@ -131,57 +128,17 @@ function mergeInterpretations(interpsA, interpsB){
 //I still don't feel like I fully understand it.
 module.exports = {
     /**
-     * chartToInterpretations converts a parse chart to a tree of langNodes with "interpretations" properties.
-     * Interpretations is an array of component arrays.
-     *    It might be possible to slightly modify the parse function to generate an interpretation tree more efficiently
-     *    however, I don't want to make parse any more complex that it already is at this point.
-     *    With some query statistics it could even become possible to further prune the grammer by leaving out
-     *    highly imporobable parses.
+     * Asynchronously create a parse chart. All the states in the chat are multi-parse trees.
+     * You can extract the overall parse tree by pulling the GAMMA state from the last column.
+     * 
+     * Parse is async because every non-terminal look-up is a trip to the database,
+     * and I want to minimize the amount of blocking that causes.
+     * 
+     * It would be interesting to make a streaming version of this
+     * (i.e. create a parse chart with events you can bind to).
+     * The purpose would be to create start returning interpretations as they are found.
+     * I'm not sure if that would be feasilble to do on a multi-parse tree though.
      */
-     //Deprecated
-    chartToInterpretations : function (chart) {
-         //Returns an array of interpretations. Each interpretation is a corresponding array of components.
-        function processComponents(components, colIdx) {
-            var component, langNodeInterps;
-            if(components.length === 0 || colIdx <= 0){//colIdx?
-                return [[]];
-            }
-            component = components.slice(-1)[0];
-            if('terminal' in component) {
-                return _.map(processComponents(components.slice(0, -1), colIdx - component.terminal.length), function(interpretation){
-                    return interpretation.concat(component);
-                });
-            } else if('regex' in component) {
-                return _.map(processComponents(components.slice(0, -1), colIdx - component.match.length), function(interpretation){
-                    return interpretation.concat(component);
-                });
-            } else if('category' in component) {
-                langNodeInterps = _.filter(chart[colIdx], function(langNode) {
-                    return (langNode.category === component.category) && (langNode.parseData.atComponent >= langNode.components.length);
-                });
-                if(langNodeInterps.length === 0 ) return [[]];
-                return _.flatten(_.map(langNodeInterps, function(langNodeInterp) {
-                    //Might be causing stack overflow.
-                    var returnInterp = langNodeInterp;//_.extend({}, langNodeInterp);//TODO: Probably not necessairy.
-                    returnInterp.interpretations = processComponents(returnInterp.components, colIdx);
-                    return _.map(processComponents(components.slice(0, -1), langNodeInterp.parseData.origin), function(interpretation){
-                        //TODO: remove parseData here?
-                        return interpretation.concat(returnInterp);
-                    });
-                }), true);
-            } else {
-                throw "Unknown component type:\n" + JSON.stringify(component);
-            }
-        }
-        var interpretationsTree = processComponents([{category : 'GAMMA'}], chart.length - 1)[0][0];
-        if(interpretationsTree){
-            return _.flatten(interpretationsTree.interpretations, true);
-        } else {
-            return interpretationsTree;
-        }
-    },
-    //TODO: I would like to make a streaming version of this.
-    //i.e. it would synchronously return an empty parsechart with async events you can bind to.
     parse : function (input, startCategory, collection, callback) {
         if(!input) {
             callback('No input');
@@ -393,7 +350,6 @@ module.exports = {
             }); 
             statePools.push(statePool);
         });
-        //TODO: Try feeding this into predictor instead so GAMMA doesn't show up in the output.
         statePools[0].emit('add', {
             'category' : 'GAMMA',
             'components' : [{'category' : startCategory}],
