@@ -16,7 +16,7 @@ exports.testNodes = [{
 exports.simpleTestNodes = [{
     content: {
         category: 'main',
-        components: ['hello', 'world']
+        components: ['hello', ' ', 'world']
     }
 }, {
     content: {
