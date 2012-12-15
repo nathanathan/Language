@@ -27,7 +27,6 @@ However, it might be nice to make the gh api code node.js independent so it can 
 var GitHubApi = require("github");
 */
 var config = require('./config');
-var langNodes = require('./langNodes');
 var EarleyParser = require('./earley');
 var utils = require('./utils');
 

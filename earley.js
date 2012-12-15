@@ -152,9 +152,11 @@ module.exports = {
                     return interpretation.concat(component);
                 });
             } else if('regex' in component) {
-                return _.map(processComponents(components.slice(0, -1), colIdx - component.match.length), function(interpretation){
-                    return interpretation.concat(component);
-                });
+                if(component.match){
+                    return _.map(processComponents(components.slice(0, -1), colIdx - component.match.length), function(interpretation){
+                        return interpretation.concat(component);
+                    });
+                }
             } else if('category' in component) {
                 langNodeInterps = _.filter(chart[colIdx], function(langNode) {
                     return (langNode.category === component.category) && (langNode.parseData.atComponent >= langNode.components.length);
