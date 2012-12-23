@@ -76,14 +76,20 @@ langNode:
                         properties: {
                             regex: { type: "string" }
                         }
-                    },
+                    }
                 ]
             },
             repository: {
                 type: "object",
                 properties: {
-                    type: "gist",
-                    gistId: "3925079",
+                    type: { 
+                        description: "Currently only gist is supported.",
+                        type: "string" 
+                    },
+                    gistId: {
+                        description: "Only needed for gist type repositories.",
+                        type: "string"
+                    },
                     lastSync: { type: "string"}
                 }
             },

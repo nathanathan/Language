@@ -1,7 +1,8 @@
 #!/bin/env node
 //TODOS:
 //Add a way to change the query category to the UI (aside from using a `category/foo` url).
-//Find out the source of the error that always gets when adding nodes.
+//Make better language node added screen
+//Create queries widget.
 
 var express = require('express');
 var fs      = require('fs');
@@ -110,6 +111,30 @@ app.get('/interpretations/:id', function(req, res, next) {
 });
 
 
+//TODO: This is going to need more consideration.
+//Should it be completely open? Should there be some built in MR queries?
+//At the moment I'm just interested in frequently missed queries
+//(so people can see what kind of widgets are needed).
+//Perhaps I should just make a separate collection for them and expose only that?
+app.get('/api/queries', function(req, res, next) {
+    res.header("Access-Control-Allow-Origin", "*");
+    db.collection('queries').find(req.body.selector, {
+        limit: 100,
+        sort: [
+            ['timestamp', - 1]
+        ]
+    }).toArray(function(err, queries) {
+        if (err) {
+            next(err);
+            return;
+        }
+        res.writeHead(200, {
+            'Content-Type': 'application/json'
+        });
+        res.end(JSON.stringify(queries));
+    });
+    return;
+});
 
 /**
  * It might be desirable to have widget html served from this server for a few reasons:
@@ -299,15 +324,25 @@ function syncNode(query, content, callback) {
     }, {
         'upsert': true,
         'new': true,
-        'safe': true //Not sure if this is needed for findAndModify, it checks for success
+        'safe': true //Not sure if this is needed for findAndModify, it waits for success
     },
     function(err, result) {
+        if(!result){
+            //When the queried node does not exist, it is inserted,
+            //and the result ends up being null.
+            //I take another trip to the database to get the result.
+            db.collection('langNodes').findOne(query, {}, function(err, result) {
+                callback(err, result);
+            });
+            return;
+        }
         callback(err, result);
     });
 }
 
 /**
- * Return info on a language node and sync it with its repo
+ * Return info on a language node and sync it with its repo.
+ * It might be better to separate these functions.
  **/
 app.get('/langNode/:id', function(req, res, next) {
     var id = req.params.id;
@@ -345,13 +380,14 @@ app.get('/langNode/:id', function(req, res, next) {
                 
                 syncNode({
                     _id: langNode._id
-                }, content, function(err, syncedNode) {
+                },
+                content,
+                function(err, syncedNode) {
                     if(err) {
                         next(err);
                         return;
                     }
-                    //Files are kept separately so langNode docs are smaller.
-                    //Eventually, I would like to use ghpages
+                    //Files are kept separately so langNodes are smaller.
                     db.collection('files').update({
                         _id: syncedNode._id
                     }, {
@@ -360,7 +396,9 @@ app.get('/langNode/:id', function(req, res, next) {
                     }, {
                         upsert: true,
                         safe: true
-                    }, function() {});
+                    }, function(err) {
+                        console.log(err)
+                    });
                     renderedTemplate = zcache.nodeInfoTemplate({
                         syncedNode: syncedNode,
                         repositoryData: repositoryData,
