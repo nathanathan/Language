@@ -30,6 +30,7 @@ h1{
 }
 .category{
     float: right;
+    margin: .5em;
 }
 input[name=category]{
     text-align: center;

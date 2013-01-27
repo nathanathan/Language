@@ -23,9 +23,12 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#f9f9f9', end
 }
 .help-link{
     text-decoration: none;
+    color: #A35;
 }
 .help-link:hover {
     color: pink;
+}
+.help-link:visited {
 }
 input[name=q]{
     width:20em;
@@ -48,8 +51,10 @@ input[name=category]{
 		</div>
 	</form>
     <div style="height:5em;"></div>
-    <p><a href="category/main?q=How+does+language+work%3F" class="help-link">How does Language work?</a></p>
-    <p><a href="category/main?q=example+queries" class="help-link">Example queries</a></p>
+    <p><a href="?q=How+does+language+work%3F" class="help-link">How Language works</a></p>
+    <p><a href="?q=add+language+node" class="help-link">Add Language node</a></p>
+    <p><a href="?q=example+queries" class="help-link">Example queries</a></p>
+    <p><a href="?q=show+source" class="help-link">Source code</a></p>
     </center>
 </body>
 </html>
