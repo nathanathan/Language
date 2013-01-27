@@ -21,16 +21,35 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#f9f9f9', end
 .category{
     margin-bottom: 1em;
 }
+.help-link{
+    text-decoration: none;
+}
+.help-link:hover {
+    color: pink;
+}
+input[name=q]{
+    width:20em;
+}
+input[name=category]{
+    text-align: center;
+    border: 0;
+    width: 10em;
+}
 </style>
 </head>
 <body>
-    <form action="/category/{{category}}"><center>
+    <center>
+    <form>
         <h1>Language</h1>
-        <div class="category">category: {{category}}</div>
-		<textarea cols="47" rows="3" name="q">How does language work?</textarea>
+        <div class="category">category: <input name="category" value="{{category}}"></input></div>
+		<input name="q"></input>
 		<div class="buttonHolder">
 			<button type="submit" value="interpret">interpret</button>
 		</div>
-	</center></form>
+	</form>
+    <div style="height:5em;"></div>
+    <p><a href="category/main?q=How+does+language+work%3F" class="help-link">How does Language work?</a></p>
+    <p><a href="category/main?q=example+queries" class="help-link">Example queries</a></p>
+    </center>
 </body>
 </html>

@@ -1,6 +1,5 @@
 #!/bin/env node
 //TODOS:
-//Add a way to change the query category to the UI (aside from using a `category/foo` url).
 //Make better language node added screen
 //Create queries widget.
 
@@ -175,84 +174,91 @@ function renderChart(input, chart){
     });
 }
 
-app.get('/category/:category', function(req, res, next){
+function queryHandler(req, res, next){
     //TODO: Check that the category exists.
     var renderedTemplate;
-    var category = req.params.category;
-    if('q' in req.query){
-        var queryId = new mongo.ObjectID();
-        db.collection('queries').insert({
-            '_id': queryId,
-            'query': req.query.q,
-            'category': category,
-            'timestamp': String(new Date())
-        }, 
-        { safe: true }, 
-        function(err, result){
-            if(err) {
-                next(err);
-                return;
-            }
-        });
-        EarleyParser.parse(req.query.q, category, db.collection('langNodes'), function(err, chart){
-            var interpretations = [];
-            var gammaNode;
-            if(err){
-                next(err);
-                return;
-            }
-            try{
-                if('chart' in req.query){
-                    res.send(renderChart(req.query.q, chart));
-                } else if( 'json' in req.query) {
-                    res.send('<pre>'+JSON.stringify(utils.deprototype(_.find(chart[chart.length - 1], function(x){return x.category === "GAMMA";})), 2, 4)+'</pre>');
-                   // res.send('<pre>'+JSON.stringify(EarleyParser.chartToInterpretations(chart), 2, 4)+'</pre>');
-                } else {
-                    //interpretations = EarleyParser.chartToInterpretations(chart);
-                    gammaNode = _.find(chart[chart.length - 1], function(x) {
-                        return x.category === "GAMMA";
+    var category  = ('category' in req.query) ? req.query.category : 'main';
+    var queryId = new mongo.ObjectID();
+    db.collection('queries').insert({
+        '_id': queryId,
+        'query': req.query.q,
+        'category': category,
+        'timestamp': String(new Date())
+    }, 
+    { safe: true }, 
+    function(err, result){
+        if(err) {
+            next(err);
+            return;
+        }
+    });
+    EarleyParser.parse(req.query.q, category, db.collection('langNodes'), function(err, chart){
+        var interpretations = [];
+        var gammaNode;
+        if(err){
+            next(err);
+            return;
+        }
+        try{
+            if('chart' in req.query){
+                res.send(renderChart(req.query.q, chart));
+            } else if( 'json' in req.query) {
+                res.send('<pre>'+JSON.stringify(utils.deprototype(_.find(chart[chart.length - 1], function(x){return x.category === "GAMMA";})), 2, 4)+'</pre>');
+               // res.send('<pre>'+JSON.stringify(EarleyParser.chartToInterpretations(chart), 2, 4)+'</pre>');
+            } else {
+                //interpretations = EarleyParser.chartToInterpretations(chart);
+                gammaNode = _.find(chart[chart.length - 1], function(x) {
+                    return x.category === "GAMMA";
+                });
+                if(gammaNode){
+                    interpretations = _.map(gammaNode.interpretations, function(conponents){
+                        //Gamma node interpretations all have one component which corresponds to the queried category langNode
+                        var categoryNode = conponents[0];
+                        return {
+                            '_id': new mongo.ObjectID(),
+                            'root': categoryNode,
+                            'queryId': queryId
+                        };
                     });
-                    if(gammaNode){
-                        interpretations = _.map(gammaNode.interpretations, function(conponents){
-                            //Gamma node interpretations all have one component which corresponds to the queried category langNode
-                            var categoryNode = conponents[0];
-                            return {
-                                '_id': new mongo.ObjectID(),
-                                'root': categoryNode,
-                                'queryId': queryId
-                            };
-                        });
-                    }
-                    _.defer(function(){
-                        //This is deferred so it can happen whilst the interpretations are inserted.
-                        renderedTemplate = zcache.resultsTemplate({
-                            'interpretations': interpretations,
-                            'query': req.query.q,
-                            'category': category,
-                            'serverUrl': encodeURIComponent(config.serverUrl)
-                        });
-                    });
-                    if(interpretations.length > 0){
-                        db.collection('interpretations').insert(interpretations, {
-                            safe: true
-                        }, function(err, result) {
-                            if(err) {
-                                next(err);
-                                return;
-                            }
-                            res.send(renderedTemplate);
-                        });
-                    } else {
-                         _.defer(function(){
-                             //This is deferred so it happens after the template is rendered.
-                             res.send(renderedTemplate);
-                         });
-                    }
                 }
-            } catch(e) {
-                next(e);
+                _.defer(function(){
+                    //This is deferred so it can happen whilst the interpretations are inserted.
+                    renderedTemplate = zcache.resultsTemplate({
+                        'interpretations': interpretations,
+                        'query': req.query.q,
+                        'category': category,
+                        'serverUrl': encodeURIComponent(config.serverUrl)
+                    });
+                });
+                if(interpretations.length > 0){
+                    db.collection('interpretations').insert(interpretations, {
+                        safe: true
+                    }, function(err, result) {
+                        if(err) {
+                            next(err);
+                            return;
+                        }
+                        res.send(renderedTemplate);
+                    });
+                } else {
+                     _.defer(function(){
+                         //This is deferred so it happens after the template is rendered.
+                         res.send(renderedTemplate);
+                     });
+                }
             }
-        });
+        } catch(e) {
+            next(e);
+        }
+    });
+}
+
+app.get('/category/:category', function(req, res, next){
+    var renderedTemplate;
+    var category  = ('category' in req.query) ? req.query.category : 'main';
+    if('q' in req.query){
+        req.query.category = req.params.category;
+        queryHandler(req, res, next);
     } else {
         renderedTemplate = zcache.indexTemplate({'category' : category});
         res.send(renderedTemplate);
@@ -260,8 +266,14 @@ app.get('/category/:category', function(req, res, next){
 });
 app.get('/', function(req, res, next){
     var renderedTemplate;
-    var category = 'main';
-    
+    var category  = ('category' in req.query) ? req.query.category : 'main';
+    if('q' in req.query){
+        queryHandler(req, res, next);
+    } else {
+        renderedTemplate = zcache.indexTemplate({'category' : category});
+        res.send(renderedTemplate);
+    }
+
     /*
     http://www.garann.com/dev/2011/calling-the-github-api-with-node-js/
     console.log(req.session);
@@ -276,8 +288,7 @@ app.get('/', function(req, res, next){
     });
     */
     
-    renderedTemplate = zcache.indexTemplate({'category' : category});
-    res.send(renderedTemplate);
+   
 });
 app.get('/upvote/:id', function(req, res){
     res.send("Not yet implemented");
