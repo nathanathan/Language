@@ -1,3 +1,5 @@
+**I no longer plan to develop this project, but I have reused some of the ideas from it to write this proposal, which I may develop into something eventually: https://github.com/nathanathan/ContextCommand**
+
 Language
 ========
 
